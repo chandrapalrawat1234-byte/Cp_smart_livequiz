@@ -1,7 +1,5 @@
 import { Telegraf, Markup } from 'telegraf';
 import express from 'express';
-import PDFDocument from 'pdfkit';
-import fs from 'fs';
 import 'dotenv/config';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -9,213 +7,275 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // 🗄️ डेटाबेस और मेमोरी
 const masterPassword = process.env.MASTER_PASSWORD || 'CP@2026';
 const allowedUsers = new Set();
-const userStates = {}; // यह ट्रैक करेगा कि बोट अभी टाइटल मांग रहा है या प्रश्न
-const tempQuizData = {}; // मैराथन प्रश्नों की कतार
+const userStates = {}; 
+const tempQueue = {}; // मैराथन कतार के लिए
 const myQuizzes = new Map(); // सेव किए गए क्विज
+const activeSessions = new Map(); // लाइव चल रहे ग्रुप क्विज
 
-// 📢 VIP प्रोमोशनल लिंक्स (शानदार फॉर्मेट में)
-const promoLinks = [
-    '📚 𝗝𝗼𝗶𝗻 𝗠𝗮𝗶𝗻 𝗖𝗵𝗮𝗻𝗻𝗲𝗹:\n👉 https://t.me/gkandgs12',
-    '💬 𝗝𝗼𝗶𝗻 𝗣𝗿𝗮𝗰𝘁𝗶𝗰𝗲 𝗚𝗿𝗼𝘂𝗽:\n👉 https://t.me/gkandgs85',
-    '🏆 𝗝𝗼𝗶𝗻 𝗤𝘂𝗶𝘇 𝗖𝗹𝘂𝗯:\n👉 https://t.me/QuizClub15seconds'
-];
-
-const megaPromo = `\n\n🌟 𝗦𝘁𝘂𝗱𝘆 𝘄𝗶𝘁𝗵 𝗖𝗣 𝗥𝗮𝘄𝗮𝘁 𝗦𝗶𝗿 🌟\n━━━━━━━━━━━━━━━━━━━\n📚 चैनल: t.me/gkandgs12\n💬 प्रैक्टिस: t.me/gkandgs85\n🏆 क्विज: t.me/QuizClub15seconds`;
-
-// 🛡️ क्रैश-प्रूफ
-process.on('uncaughtException', (err) => console.log('क्रैश रोका गया:', err.message));
-process.on('unhandledRejection', (reason) => console.log('प्रॉमिस एरर रोका गया:', reason));
-
-// 🎛️ मेनू
-const mainMenu = Markup.keyboard([
-  ['📝 नया लाइव क्विज (मैराथन)', '📄 PDF मेकर (VIP / सामान्य)'],
-  ['⚙️ ग्रुप सेटिंग', '📊 My Quizzes'],
-  ['🛑 सिस्टम लॉक करें']
-]).resize();
-
-const pdfMenu = Markup.keyboard([
-  ['🌟 VIP PDF (वेबसाइट स्टाइल)', '📄 सामान्य PDF (सिंपल)'],
-  ['🔙 मुख्य मेनू']
-]).resize();
+// 📢 आपकी शानदार प्रोमो लिंक्स
+const promo1 = "📚 PDF & Notes: @gkandgs12";
+const promo2 = "💬 Practice Group: @gkandgs85";
+const promo3 = "🏆 Quiz Club: @QuizClub15seconds";
+const megaPromo = `\n━━━━━━━━━━━━━━━━━━━\n🌟 𝗦𝘁𝘂𝗱𝘆 𝘄𝗶𝘁𝗵 𝗖𝗣 𝗥𝗮𝘄𝗮𝘁 𝗦𝗶𝗿 🌟\n${promo1}\n${promo2}\n${promo3}`;
 
 bot.start((ctx) => {
     const payload = ctx.startPayload;
     if (payload && payload.startsWith('quiz_')) {
-        return startQuizInGroup(ctx, payload);
+        return initGroupLobby(ctx, payload);
     }
     
     if (allowedUsers.has(ctx.from.id.toString())) {
-        ctx.reply('👑 प्रणाम CP Rawat Sir!\nआपका सुपर मैराथन सिस्टम तैयार है। 👇', mainMenu);
+        ctx.reply('👑 प्रणाम CP Rawat Sir!\nसुपर मैराथन और ऑफिशियल क्विज इंजन तैयार है। 👇', 
+            Markup.keyboard([
+                ['📝 नया मैराथन बनाएं', '⚙️ क्विज सेटिंग्स'],
+                ['🛑 सिस्टम लॉक करें']
+            ]).resize()
+        );
     } else {
         ctx.reply('🔒 कृपया मास्टर पासवर्ड दर्ज करें:');
     }
 });
 
+// 🔐 पासवर्ड और मैराथन कतार सिस्टम
 bot.on('text', async (ctx, next) => {
     const text = ctx.message.text;
     const userId = ctx.from.id.toString();
 
-    // पासवर्ड चेक
     if (text === masterPassword) {
         allowedUsers.add(userId);
-        return ctx.reply('✅ एक्सेस ग्रांटेड! स्वागत है सर।', mainMenu);
+        return ctx.reply('✅ एक्सेस ग्रांटेड!', Markup.keyboard([['📝 नया मैराथन बनाएं', '⚙️ क्विज सेटिंग्स']]).resize());
     }
-    if (!allowedUsers.has(userId)) return;
+    if (!allowedUsers.has(userId)) return next();
 
-    // मेनू
-    if (text === '🔙 मुख्य मेनू') {
-        userStates[userId] = '';
-        return ctx.reply('🔙 मुख्य मेनू:', mainMenu);
-    }
-    
-    // नया क्विज शुरू करना (टाइटल पूछना)
-    if (text === '📝 नया लाइव क्विज (मैराथन)') {
+    if (text === '📝 नया मैराथन बनाएं') {
         userStates[userId] = 'AWAITING_TITLE';
-        return ctx.reply('📝 **नया क्विज बन रहा है...**\nकृपया इस क्विज का **टाइटल (Title)** लिखकर भेजें:');
+        tempQueue[userId] = { title: '', questions: [] };
+        return ctx.reply('📝 **नए मैराथन का टाइटल भेजें:**');
     }
 
-    // स्टेट मशीन: टाइटल -> डिस्क्रिप्शन -> प्रश्न कतार
     if (userStates[userId] === 'AWAITING_TITLE') {
-        tempQuizData[userId] = { title: text, description: '', questions: [] };
-        userStates[userId] = 'AWAITING_DESC';
-        return ctx.reply('✅ टाइटल सेट हो गया।\nअब इसका **डिस्क्रिप्शन (Description)** लिखकर भेजें:');
-    }
-
-    if (userStates[userId] === 'AWAITING_DESC') {
-        tempQuizData[userId].description = text;
-        userStates[userId] = 'AWAITING_QUESTIONS';
-        return ctx.reply(`✅ डिस्क्रिप्शन सेट हो गया!\n\n🚀 **मैराथन कतार चालू है!**\nअब आप अपने प्रश्न (✅ और व्याख्या के साथ) भेजना शुरू करें।\nआप चाहें तो 100-100 करके कई बार भेज सकते हैं। मैं सब जोड़ता रहूँगा।\n\nजब सारे प्रश्न डल जाएं, तो नीचे दिया गया बटन दबाएं।`, 
-            Markup.inlineKeyboard([Markup.button.callback('✅ सेट पूरा हुआ (Finish)', 'finish_quiz')])
+        tempQueue[userId].title = text;
+        userStates[userId] = 'AWAITING_Q';
+        return ctx.reply(`✅ टाइटल सेट!\n\n🚀 अब अपने प्रश्न (✅ सहित) भेजना शुरू करें। आप 100-100 करके कई बार भेज सकते हैं, मैं कतार में लगाता रहूँगा। जब सारे प्रश्न डल जाएं, तो 'सेट पूरा हुआ' दबाएं।`,
+            Markup.inlineKeyboard([Markup.button.callback('✅ सेट पूरा हुआ (Finish)', 'setup_settings')])
         );
     }
 
-    // अगर यूजर प्रश्न भेज रहा है (कतार मोड)
-    if (userStates[userId] === 'AWAITING_QUESTIONS' && text.includes('✅')) {
-        return parseAndQueueQuestions(ctx, text, userId);
-    }
-
-    // PDF मेनू
-    if (text === '📄 PDF मेकर (VIP / सामान्य)') return ctx.reply('📄 **PDF मेकर मोड:**', pdfMenu);
-    if (text === '🌟 VIP PDF (वेबसाइट स्टाइल)' || text === '📄 सामान्य PDF (सिंपल)') {
-        return ctx.reply('यह फीचर अभी अगले अपडेट में पूरी तरह कॉन्फ़िगर होगा। अभी क्विज सिस्टम चेक करें!');
+    if (userStates[userId] === 'AWAITING_Q' && text.includes('✅')) {
+        return queueQuestions(ctx, text, userId);
     }
 
     next();
 });
 
 // ==========================================
-// 🧠 कोर इंजन: व्याख्या, कतार और प्रोमो
+// 🧠 प्रश्न छांटना, कतार और ऑटो-लिंकिंग
 // ==========================================
-async function parseAndQueueQuestions(ctx, text, userId) {
-    const rawQuestions = text.split(/(?=Q\.|Q\s|प्रश्न\s|प्र\.)/i);
-    let newQuestionsCount = 0;
+function queueQuestions(ctx, text, userId) {
+    const rawQs = text.split(/(?=Q\.|Q\s|प्रश्न\s|प्र\.)/i);
+    let added = 0;
 
-    for (const rawQ of rawQuestions) {
+    for (const rawQ of rawQs) {
         if (rawQ.trim().length < 10) continue;
-        
         const lines = rawQ.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        let question = lines[0];
-        let options = [];
-        let correctOptionId = -1;
-        let explanationText = "";
+        let question = lines[0].replace(/^(Q\.|Q\s|प्रश्न\s|प्र\.)/i, '').trim(); 
+        let options = [], correctId = -1, explanation = "";
 
-        // व्याख्या और ऑप्शन छांटना
         for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.toLowerCase().startsWith('व्याख्या:') || line.toLowerCase().startsWith('explain:')) {
-                explanationText = line.replace(/व्याख्या:|explain:/i, '').trim();
-                break; // व्याख्या मिल गई तो लूप रोकें
+            if (lines[i].match(/^(व्याख्या:|explain:)/i)) {
+                explanation = lines[i].replace(/^(व्याख्या:|explain:)/i, '').trim();
+                break;
             }
-            if (line.match(/^[A-D]\)|^[A-D]\.|^[1-4]\)|^[1-4]\./i)) {
-                let cleanOption = line.replace(/^[A-D]\)|^[A-D]\.|^[1-4]\)|^[1-4]\./i, '').trim();
-                if (line.includes('✅')) {
-                    cleanOption = cleanOption.replace('✅', '').trim();
-                    correctOptionId = options.length;
+            if (lines[i].match(/^[A-D]\)|^[A-D]\.|^[1-4]\)|^[1-4]\./i)) {
+                let opt = lines[i].replace(/^[A-D]\)|^[A-D]\.|^[1-4]\)|^[1-4]\./i, '').trim();
+                if (opt.includes('✅')) {
+                    opt = opt.replace('✅', '').trim();
+                    correctId = options.length;
                 }
-                options.push(cleanOption);
+                options.push(opt);
             }
         }
 
-        if (options.length >= 2 && correctOptionId !== -1) {
-            // इंटरलिंकिंग (हर प्रश्न में अल्टरनेट लिंक या मेगा प्रोमो)
-            let currentQIndex = tempQuizData[userId].questions.length;
-            let finalExplanation = explanationText;
+        if (options.length >= 2 && correctId !== -1) {
+            let qIndex = tempQueue[userId].questions.length;
+            let finalExp = explanation;
             
-            if ((currentQIndex + 1) % 10 === 0) {
-                finalExplanation += megaPromo; // हर 10वें प्रश्न पर मेगा प्रोमो
-            } else if ((currentQIndex + 1) % 3 === 0) {
-                finalExplanation += `\n\n${promoLinks[currentQIndex % 3]}`; // हर तीसरे प्रश्न पर अल्टरनेट लिंक
-            }
+            // 🔄 प्रोमो इंजन (हर 5-6 पर लिंक्स, बीच में मेगा प्रोमो)
+            if ((qIndex + 1) % 15 === 0) finalExp += megaPromo;
+            else if ((qIndex + 1) % 5 === 0) finalExp += `\n\n${promo1}`;
+            else if ((qIndex + 1) % 6 === 0) finalExp += `\n\n${promo2}`;
 
-            if (finalExplanation.length > 190) {
-                finalExplanation = finalExplanation.substring(0, 180) + '...\n' + megaPromo;
-            }
-
-            tempQuizData[userId].questions.push({
-                question, options, correctOptionId, explanation: finalExplanation
-            });
-            newQuestionsCount++;
+            tempQueue[userId].questions.push({ question, options, correctId, explanation: finalExp.substring(0, 195) });
+            added++;
         }
     }
-
-    const totalInQueue = tempQuizData[userId].questions.length;
-    ctx.reply(`📥 **${newQuestionsCount} नए प्रश्न कतार में जुड़ गए!**\n(कुल जमा प्रश्न: ${totalInQueue})\n\nऔर प्रश्न भेजें या काम खत्म होने पर 'सेट पूरा हुआ' दबाएं।`, 
-        Markup.inlineKeyboard([Markup.button.callback('✅ सेट पूरा हुआ (Finish)', 'finish_quiz')])
+    ctx.reply(`📥 **${added} नए प्रश्न कतार में जुड़े!** (कुल: ${tempQueue[userId].questions.length})\nऔर भेजें या 'सेट पूरा हुआ' दबाएं।`,
+        Markup.inlineKeyboard([Markup.button.callback('✅ सेट पूरा हुआ (Finish)', 'setup_settings')])
     );
 }
 
-// 🏁 जब सेट पूरा हो जाए
-bot.action('finish_quiz', (ctx) => {
+// ==========================================
+// ⚙️ सेटिंग्स (Timer & Shuffle)
+// ==========================================
+bot.action('setup_settings', (ctx) => {
     const userId = ctx.from.id.toString();
-    const data = tempQuizData[userId];
-
-    if (!data || data.questions.length === 0) {
-        return ctx.answerCbQuery('❌ कतार खाली है!', { show_alert: true });
-    }
-
     const quizId = `quiz_${Date.now()}`;
-    myQuizzes.set(quizId, { ...data, owner: userId, count: data.questions.length });
-    
-    // कतार साफ करें
-    userStates[userId] = '';
-    delete tempQuizData[userId];
+    myQuizzes.set(quizId, { ...tempQueue[userId], id: quizId, time: 15, shuffleQ: true, shuffleO: false });
+    userStates[userId] = ''; delete tempQueue[userId];
 
-    const quizMenu = Markup.inlineKeyboard([
-        [Markup.button.url('↗️ ग्रुप में चलाएं (Start in Group)', `https://t.me/${ctx.botInfo.username}?startgroup=${quizId}`)],
-        [Markup.button.callback('✏️ और प्रश्न जोड़ें (Edit)', `addmore_${quizId}`)]
-    ]);
-
-    ctx.editMessageText(`🎉 **मैराथन क्विज सेट शानदार तरीके से तैयार है!**\n\n📌 **टाइटल:** ${data.title}\n📝 **विवरण:** ${data.description}\n📊 **कुल प्रश्न:** ${data.count}\n🆔 **क्विज ID:** #${quizId}\n\nनीचे दिए गए बटन से इसे किसी भी ग्रुप में चलाएं:`, quizMenu);
+    ctx.editMessageText(`⚙️ **मैराथन सेटिंग्स**\nक्विज ID: #${quizId}\n\nनीचे दिए गए बटन से टाइमर और शफलिंग सेट करें, फिर 'तैयार करें' दबाएं:`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('⏱️ टाइमर: 15s', `time_${quizId}`)],
+            [Markup.button.callback('🔀 प्रश्न शफल: चालू', `shufQ_${quizId}`), Markup.button.callback('🔀 ऑप्शन शफल: बंद', `shufO_${quizId}`)],
+            [Markup.button.callback('🚀 क्विज तैयार करें', `publish_${quizId}`)]
+        ])
+    );
 });
 
-// 🚀 ग्रुप में क्विज चलाने का फंक्शन
-async function startQuizInGroup(ctx, quizId) {
-    const quizData = myQuizzes.get(quizId);
-    if (!quizData) return ctx.reply('❌ यह क्विज अब उपलब्ध नहीं है।');
+bot.action(/publish_(.+)/, (ctx) => {
+    const quizId = ctx.match[1];
+    ctx.editMessageText(`🎉 **मैराथन बिल्कुल तैयार है!**\n\nअब इसे ऑफिशियल तरीके से किसी भी ग्रुप में चलाएं:`,
+        Markup.inlineKeyboard([
+            // जादुई लिंक: एडमिन परमिशन के साथ ग्रुप में ले जाएगा
+            [Markup.button.url('↗️ ग्रुप में चलाएं (Start in Group)', `https://t.me/${ctx.botInfo.username}?startgroup=${quizId}&admin=post_messages`)],
+            [Markup.button.callback('📢 ऑटो-शेयर (क्लब में)', `shareclub_${quizId}`)]
+        ])
+    );
+});
 
-    ctx.reply(`🔥 **${quizData.title}** शुरू हो रहा है!\n${quizData.description}\n\nकुल प्रश्न: ${quizData.count}\nसौजन्य से: CP Rawat Sir`);
+bot.action(/shareclub_(.+)/, async (ctx) => {
+    const quizId = ctx.match[1];
+    await ctx.telegram.sendMessage('@QuizClub15seconds', `🔥 **नया लाइव मैराथन!**\n\nCP Rawat Sir ने नया क्विज सेट किया है। नीचे क्लिक करें!`,
+        Markup.inlineKeyboard([[Markup.button.url('👉 क्विज शुरू करें', `https://t.me/${ctx.botInfo.username}?start=${quizId}`)]])
+    );
+    ctx.answerCbQuery('✅ क्लब में शेयर हो गया!');
+});
+
+// ==========================================
+// ✋ लॉबी सिस्टम (I am ready)
+// ==========================================
+function initGroupLobby(ctx, quizId) {
+    const quiz = myQuizzes.get(quizId);
+    if (!quiz) return;
     
-    // यहाँ हम एक-एक करके ग्रुप में पोल भेजेंगे (हर 10-15 सेकंड में)
-    let i = 0;
-    const interval = setInterval(async () => {
-        if (i >= quizData.questions.length) {
-            clearInterval(interval);
-            return ctx.reply(`🏆 **क्विज समाप्त!**\nउम्मीद है आपने बेहतरीन प्रदर्शन किया होगा।\n${megaPromo}`);
-        }
-        const q = quizData.questions[i];
-        try {
-            await ctx.telegram.sendQuiz(ctx.chat.id, q.question, q.options, {
-                correct_option_id: q.correctOptionId,
-                explanation: q.explanation,
-                is_anonymous: false // ताकि लोगों को अपना रिजल्ट दिखे
-            });
-        } catch (err) { console.log('Poll Error:', err.message); }
-        i++;
-    }, 15000); // 15 सेकंड का गैप
+    const chatId = ctx.chat.id;
+    activeSessions.set(chatId, { quiz, players: new Set(), scores: {}, qIndex: 0, zeroVoteCount: 0, activePoll: null });
+
+    ctx.reply(`🏁 **${quiz.title}**\n\nकुल प्रश्न: ${quiz.questions.length}\n⏱️ टाइमर: 15 सेकंड\n\n**नियम:** शुरू करने के लिए कम से कम 2 लोगों का तैयार होना ज़रूरी है!`,
+        Markup.inlineKeyboard([[Markup.button.callback(`✋ I am ready (0/2)`, `ready_${chatId}`)]])
+    );
 }
 
-// 🌐 सर्वर
+bot.action(/ready_(.+)/, async (ctx) => {
+    const chatId = ctx.match[1];
+    const session = activeSessions.get(Number(chatId));
+    if (!session) return;
+
+    session.players.add(ctx.from.id);
+    const count = session.players.size;
+    
+    if (count >= 2) {
+        await ctx.editMessageText(`🚀 **लॉबी फुल! क्विज 3 सेकंड में शुरू हो रहा है...**\n\n${megaPromo}`);
+        setTimeout(() => sendNextQuestion(chatId), 3000);
+    } else {
+        ctx.editMessageReplyMarkup({ inline_keyboard: [[Markup.button.callback(`✋ I am ready (${count}/2)`, `ready_${chatId}`)]] });
+        ctx.answerCbQuery('✅ आप तैयार हैं! 1 और खिलाड़ी का इंतज़ार है...');
+    }
+});
+
+// ==========================================
+// 🚀 लाइव क्विज इंजन & ऑटो-स्टॉप
+// ==========================================
+async function sendNextQuestion(chatId) {
+    const session = activeSessions.get(Number(chatId));
+    if (!session || session.qIndex >= session.quiz.questions.length) return finishQuiz(chatId);
+
+    // 0 वोट पर ऑटो-स्टॉप चेक
+    if (session.zeroVoteCount >= 2) {
+        bot.telegram.sendMessage(chatId, `🛑 **क्विज ऑटो-स्टॉप!**\nलगातार 2 प्रश्नों का किसी ने उत्तर नहीं दिया, इसलिए क्विज रोक दिया गया है।`);
+        return finishQuiz(chatId);
+    }
+
+    let q = session.quiz.questions[session.qIndex];
+    // ऑटो-नंबरिंग
+    let qText = `[${session.qIndex + 1}/${session.quiz.questions.length}] ${q.question}`;
+
+    try {
+        const poll = await bot.telegram.sendQuiz(chatId, qText, q.options, {
+            correct_option_id: q.correctId,
+            explanation: q.explanation,
+            is_anonymous: false, // ऑफिशियल बोट की तरह (View Votes)
+            open_period: 15 // 15 सेकंड का टाइमर
+        });
+        
+        session.activePoll = poll.poll.id;
+        session.currentPollVotes = 0;
+        
+        // टाइमर खत्म होने पर अगला प्रश्न
+        setTimeout(() => {
+            if (session.currentPollVotes === 0) session.zeroVoteCount++;
+            else session.zeroVoteCount = 0;
+            session.qIndex++;
+            sendNextQuestion(chatId);
+        }, 16000); // 15s + 1s बफर
+    } catch (e) {
+        console.log(e);
+    }
+}
+
+// 🛑 एडमिन स्टॉप कमांड
+bot.command('stopquiz', async (ctx) => {
+    const chatMember = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
+    if (chatMember.status === 'administrator' || chatMember.status === 'creator') {
+        activeSessions.delete(ctx.chat.id);
+        ctx.reply('🛑 **ग्रुप एडमिन द्वारा क्विज तुरंत रोक दिया गया है!**');
+    } else {
+        ctx.reply('❌ केवल ग्रुप एडमिन ही क्विज रोक सकते हैं।');
+    }
+});
+
+// ==========================================
+// 📊 लीडरबोर्ड (Top 50 & Golden Folders)
+// ==========================================
+bot.on('poll_answer', (ctx) => {
+    const ans = ctx.pollAnswer;
+    activeSessions.forEach((session) => {
+        if (session.activePoll === ans.poll_id) {
+            session.currentPollVotes++;
+            if (!session.scores[ans.user.id]) session.scores[ans.user.id] = { name: ans.user.first_name, score: 0, time: 0 };
+            
+            // अगर सही ऑप्शन चुना है
+            const q = session.quiz.questions[session.qIndex];
+            if (ans.option_ids[0] === q.correctId) {
+                session.scores[ans.user.id].score++;
+            }
+        }
+    });
+});
+
+function finishQuiz(chatId) {
+    const session = activeSessions.get(Number(chatId));
+    if (!session) return;
+    
+    // टॉप 50 बच्चों का रिजल्ट बनाना
+    let results = Object.values(session.scores).sort((a, b) => b.score - a.score).slice(0, 50);
+    
+    let leaderboard = `🏁 **मैराथन '${session.quiz.title}' समाप्त!**\n\n`;
+    if (results.length === 0) {
+        leaderboard += "😔 किसी ने भी सही उत्तर नहीं दिया।";
+    } else {
+        const medals = ['🥇', '🥈', '🥉'];
+        results.forEach((r, i) => {
+            let rank = i < 3 ? medals[i] : `🎗 ${i+1}.`;
+            leaderboard += `${rank} ${r.name} – ${r.score} सही\n`;
+        });
+    }
+    
+    bot.telegram.sendMessage(chatId, `${leaderboard}\n${megaPromo}`);
+    activeSessions.delete(Number(chatId));
+}
+
 const app = express();
-app.get('/', (req, res) => res.send('CP Rawat Marathon Engine Active!'));
+app.get('/', (req, res) => res.send('CP Rawat Official Marathon Bot Active!'));
 app.listen(process.env.PORT || 3000);
 bot.launch();
