@@ -1,0 +1,16 @@
+{
+  "name": "cp-smart-livequiz",
+  "version": "2.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "express": "^4.19.2",
+    "pdfkit": "^0.15.0",
+    "dotenv": "^16.4.5"
+  }
+}
+
