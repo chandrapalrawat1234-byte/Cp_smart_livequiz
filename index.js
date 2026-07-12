@@ -13,9 +13,14 @@ const myQuizzes = new Map();
 const activeSessions = new Map(); 
 const activeGroups = new Set(); 
 
+// 🚨 महत्वपूर्ण: यहाँ अपनी प्राइवेट बैकअप चैनल की ID डालें (जो /getid से मिलेगी) 
+// उदाहरण: const BACKUP_CHANNEL_ID = '-100123456789';
+const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || ''; 
+
 // 📸 आपकी फोटो का URL (अपना सही URL यहाँ डालें)
 const CP_RAWAT_PHOTO_URL = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'; 
 
+// 🔗 बटन्स और लिंक्स
 const links = [
     { text: "📚 Join Notes Channel", url: "https://t.me/gkandgs12", desc: "📚 सी. पी. रावत सर के नोट्स के लिए यहाँ क्लिक करें" },
     { text: "💬 Join Practice Group", url: "https://t.me/gkandgs85", desc: "💬 अपने प्रश्न पूछने और डिस्कशन के लिए यहाँ क्लिक करें" },
@@ -36,7 +41,7 @@ const singlePromos = [
     "💎 <b>सफलता का ब्रह्मास्त्र!</b> 💎\n━━━━━━━━━━━━━━━━━━━━\n📘 CP Rawat Sir के सटीक मार्गदर्शन और टॉप-क्लास कंटेंट के साथ अपनी जीत सुनिश्चित करें।"
 ];
 
-// 🎨 मेगा प्रोमो विवरण (तीनों लिंक अब टेक्स्ट में - बटनों के बिना)
+// 🎨 मेगा प्रोमो विवरण (तीनों बटन + तीनों लिंक टेक्स्ट में)
 const megaPromoDesc = [
     "🌟 <b>नोट्स और स्टडी मटेरियल का खजाना!</b> 🌟\n━━━━━━━━━━━━━━━━━━━━\nसभी महत्वपूर्ण विषयों के हस्तलिखित नोट्स और पीडीएफ के लिए हमारे मुख्य चैनल से जुड़ना न भूलें।\n\n👇 <b>सफलता सुनिश्चित करने के लिए हमारे सभी चैनल्स से जुड़ें:</b>\n\n📚 <b>Notes Channel:</b> https://t.me/gkandgs12\n💬 <b>Practice Group:</b> https://t.me/gkandgs85\n🏆 <b>Quiz Club:</b> https://t.me/QuizClub15seconds",
     
@@ -47,8 +52,66 @@ const megaPromoDesc = [
 
 let dailyPromoPost = "🌟 <b>Study with CP Rawat Sir</b> 🌟\n\n🔥 <i>सरकारी नौकरी की पक्की तैयारी के लिए आज ही जुड़ें!</i>\n👇 <b>नीचे दिए गए लिंक्स से हमारे चैनल्स जॉइन करें:</b>";
 
+// 🛡️ क्रैश-प्रूफ
 process.on('uncaughtException', (err) => console.log('Error:', err.message));
 process.on('unhandledRejection', (reason) => console.log('Promise Error:', reason));
+
+// ==========================================
+// 🔄 AUTO BACKUP SYSTEM (टेलीग्राम को डेटाबेस बनाना)
+// ==========================================
+let lastBackupMsgId = null;
+
+async function saveBackup() {
+    if (!BACKUP_CHANNEL_ID) return;
+    try {
+        const data = JSON.stringify(Array.from(myQuizzes.entries()));
+        const buffer = Buffer.from(data, 'utf-8');
+        const msg = await bot.telegram.sendDocument(
+            BACKUP_CHANNEL_ID, 
+            { source: buffer, filename: 'quiz_backup.json' }, 
+            { caption: `🔄 Auto-Backup: ${new Date().toLocaleString()}` }
+        );
+        await bot.telegram.pinChatMessage(BACKUP_CHANNEL_ID, msg.message_id);
+        
+        if (lastBackupMsgId) {
+            try { await bot.telegram.deleteMessage(BACKUP_CHANNEL_ID, lastBackupMsgId); } catch(e){}
+        }
+        lastBackupMsgId = msg.message_id;
+    } catch (err) {
+        console.error('Backup Save Error:', err.message);
+    }
+}
+
+async function loadBackup() {
+    if (!BACKUP_CHANNEL_ID) return;
+    try {
+        const chat = await bot.telegram.getChat(BACKUP_CHANNEL_ID);
+        if (chat.pinned_message && chat.pinned_message.document) {
+            const fileId = chat.pinned_message.document.file_id;
+            const link = await bot.telegram.getFileLink(fileId);
+            const response = await fetch(link.href);
+            const data = await response.json();
+            
+            myQuizzes.clear();
+            for (const [key, value] of data) {
+                myQuizzes.set(key, value);
+            }
+            console.log(`✅ Backup Loaded: ${myQuizzes.size} Quizzes found.`);
+            lastBackupMsgId = chat.pinned_message.message_id;
+        }
+    } catch (err) {
+        console.error('Backup Load Error:', err.message);
+    }
+}
+
+// ==========================================
+// 🆔 CHANNEL ID GETTER (सिर्फ चैनल में काम करेगा)
+// ==========================================
+bot.on('channel_post', (ctx) => {
+    if (ctx.channelPost.text === '/getid') {
+        ctx.reply(`✅ इस चैनल की ID है:\n\n<code>${ctx.chat.id}</code>\n\nइसे कॉपी करें और अपने कोड में BACKUP_CHANNEL_ID की जगह पर डाल दें!`, { parse_mode: 'HTML' });
+    }
+});
 
 const mainMenu = Markup.keyboard([
   ['📝 Create New Quiz', '📊 My Quizzes'],
@@ -64,21 +127,32 @@ bot.start((ctx) => {
     
     const userId = ctx.from.id.toString();
     if (allowedUsers.has(userId)) {
-        ctx.reply('👑 Welcome CP Rawat Sir!\nआपका ऑफिशियल क्विज इंजन तैयार है। 👇', mainMenu);
+        ctx.reply('👑 Welcome CP Rawat Sir!\nThe Ultimate Official Quiz Engine is ready. 👇', mainMenu);
     } else {
         const welcomeMsg = `👑 <b>CP Rawat Sir's Official Quiz Bot में आपका स्वागत है!</b> 👑\n━━━━━━━━━━━━━━━━━━━━\n\nयह एक सुरक्षित और प्राइवेट सिस्टम है।\n🔒 आगे बढ़ने के लिए कृपया अपना <b>मास्टर पासवर्ड (Master Key)</b> दर्ज करें:`;
         ctx.reply(welcomeMsg, { parse_mode: 'HTML' });
     }
 });
 
+// 🛑 STOP COMMAND (Super Fixed - From Old VIP Code)
 bot.command(['stop', 'stopquiz'], async (ctx) => {
     const chatId = ctx.chat.id;
-    if (!activeSessions.has(chatId)) return;
+    
+    if (!activeSessions.has(chatId)) {
+        return ctx.reply('❌ मेरे रिकॉर्ड के अनुसार इस ग्रुप में अभी कोई क्विज नहीं चल रहा है (या सर्वर रिस्टार्ट के कारण क्विज मेमोरी से हट गया है)।');
+    }
     
     if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
-        const member = await ctx.telegram.getChatMember(chatId, ctx.from.id);
-        if (member.status === 'administrator' || member.status === 'creator' || allowedUsers.has(ctx.from.id.toString())) {
-            finishQuiz(chatId, true);
+        try {
+            const member = await ctx.telegram.getChatMember(chatId, ctx.from.id);
+            if (member.status === 'administrator' || member.status === 'creator' || allowedUsers.has(ctx.from.id.toString())) {
+                finishQuiz(chatId, true);
+            } else {
+                ctx.reply('❌ क्षमा करें, केवल एडमिन ही क्विज को रोक सकते हैं!');
+            }
+        } catch (error) {
+            console.log(error);
+            finishQuiz(chatId, true); // Fallback
         }
     } else {
         finishQuiz(chatId, true); 
@@ -86,15 +160,17 @@ bot.command(['stop', 'stopquiz'], async (ctx) => {
 });
 
 // ==========================================
-// 🛡️ ANTI-INTERFERENCE (मजबूत रडार)
+// 🛡️ ANTI-INTERFERENCE (सिर्फ Quiz Bot को रोकेगा)
 // ==========================================
 bot.on('message', async (ctx, next) => {
     const chatId = ctx.chat?.id;
     if (chatId && activeSessions.has(chatId)) {
         const msg = ctx.message;
+        if (!msg) return next();
+        
         const txt = msg.text || msg.caption || '';
         
-        // केवल 'quiz' टाइप के पोल या QuizBot के कीवर्ड्स को ही पकड़ेगा
+        // केवल 'quiz' टाइप के पोल या QuizBot के कीवर्ड्स को ही पकड़ेगा (म्यूजिक/लिंक को नहीं)
         const isQuizPoll = msg.poll && msg.poll.type === 'quiz';
         const isQuizBotTrigger = txt.includes('Get ready for the quiz') || 
                                  txt.includes('The quiz will begin when') || 
@@ -103,8 +179,6 @@ bot.on('message', async (ctx, next) => {
 
         if (isQuizPoll || isQuizBotTrigger) {
             try { await ctx.deleteMessage(msg.message_id); } catch (e) {} 
-            
-            // केवल टेक्स्ट वाले अलर्ट पर ही वार्निंग देंगे
             if (isQuizBotTrigger) {
                 return ctx.reply('⚠️ <b>चेतावनी:</b> इस ग्रुप में पहले से ही <b>CP Rawat Sir</b> का एक मैराथन क्विज चल रहा है। कृपया इसके समाप्त होने तक कोई अन्य क्विज न चलाएं!', { parse_mode: 'HTML' });
             }
@@ -144,6 +218,9 @@ function sendQuizzesPage(ctx, userId, page, isEdit = false) {
     else ctx.reply(text, { parse_mode: 'HTML', ...markup });
 }
 
+// ==========================================
+// 📝 Creation & Edit Flow 
+// ==========================================
 bot.hears('📝 Create New Quiz', (ctx) => initQuizCreation(ctx));
 bot.action('create_quiz', (ctx) => initQuizCreation(ctx));
 
@@ -161,7 +238,7 @@ bot.on('text', async (ctx, next) => {
 
     if (text === masterPassword) {
         allowedUsers.add(userId);
-        return ctx.reply('✅ Access Granted! बोट के सभी फीचर्स अब आपके लिए खुल गए हैं।', mainMenu);
+        return ctx.reply('✅ Access Granted!', mainMenu);
     }
     if (!allowedUsers.has(userId)) return next();
 
@@ -192,21 +269,24 @@ bot.on('text', async (ctx, next) => {
         return parseQuestions(ctx, text, tempQueue[userId], 'ask_timer_NEW');
     }
 
-    // 🌟 नया फीचर: एडिट करने पर क्लोन (Clone) बनाना
+    // 🌟 एडिट करने पर क्लोन (Clone) बनाना
     if (userStates[userId] === 'EDIT_ADDQ_CLONE' && text.includes('✅')) {
         return parseQuestions(ctx, text, tempQueue[userId], 'ask_timer_NEW');
     }
 
+    // ✏️ एडिट मोड (टाइटल, डिस्क्रिप्शन)
     if (userStates[userId] && userStates[userId].startsWith('EDIT_TITLE_')) {
         const quizId = userStates[userId].replace('EDIT_TITLE_', '');
         myQuizzes.get(quizId).title = text;
         userStates[userId] = '';
+        await saveBackup(); 
         return showAdminDashboard(ctx, quizId);
     }
     if (userStates[userId] && userStates[userId].startsWith('EDIT_DESC_')) {
         const quizId = userStates[userId].replace('EDIT_DESC_', '');
         myQuizzes.get(quizId).description = text;
         userStates[userId] = '';
+        await saveBackup(); 
         return showAdminDashboard(ctx, quizId);
     }
 
@@ -238,6 +318,7 @@ function parseQuestions(ctx, text, targetObj, callbackData) {
             let qIndex = targetObj.questions.length;
             let finalExp = explanation ? `${explanation}\n\n` : "";
             
+            // 🔄 हिंट में अल्टरनेट लिंक्स
             if ((qIndex + 1) % 3 === 1) finalExp += `📚 Notes: ${links[0].url}`;
             else if ((qIndex + 1) % 3 === 2) finalExp += `💬 Practice: ${links[1].url}`;
             else finalExp += `🏆 Quiz: ${links[2].url}`;
@@ -251,6 +332,7 @@ function parseQuestions(ctx, text, targetObj, callbackData) {
     );
 }
 
+// ⏱️ Ask Timer, Neg Mark & Shuffle
 bot.action('ask_timer_NEW', (ctx) => {
     ctx.editMessageText('⏱ **How much time should users have to answer each question?**',
         Markup.inlineKeyboard([
@@ -295,7 +377,7 @@ bot.action(/setN_(.+?)_(.+)/, (ctx) => {
     );
 });
 
-bot.action(/setS_(.+?)_(.+)/, (ctx) => {
+bot.action(/setS_(.+?)_(.+)/, async (ctx) => {
     const s = ctx.match[1];
     const quizIdArg = ctx.match[2];
     const userId = ctx.from.id.toString();
@@ -309,17 +391,18 @@ bot.action(/setS_(.+?)_(.+)/, (ctx) => {
     }
     
     userStates[userId] = '';
+    await saveBackup(); // 🔄 क्विज पूरा होते ही बैकअप सेव करें!
     showAdminDashboard(ctx, finalQuizId, true);
 });
 
 // ==========================================
-// 👑 Admin Dashboard & INLINE SHARE
+// 👑 Admin Dashboard & INLINE SHARE MAGIC
 // ==========================================
 function showAdminDashboard(ctx, quizId, isEditMsg = false) {
     const quiz = myQuizzes.get(quizId);
     if (!quiz) return ctx.reply('Quiz not found.');
     
-    let text = `🏁 <b>The quiz '${quiz.title}' has been created/updated!</b>\n\n`;
+    let text = `🏁 <b>The quiz '${quiz.title}' has been created!</b>\n\n`;
     text += `🖊 ${quiz.questions.length} questions · ⏱ ${quiz.time} sec\n`;
     if(quiz.description) text += `\n<i>Description: ${quiz.description}</i>\n`;
     text += `\n<b>External sharing link:</b>\nhttps://t.me/${ctx.botInfo.username}?start=${quizId}`;
@@ -376,7 +459,7 @@ bot.action(/editmenu_(.+)/, (ctx) => {
     );
 });
 bot.action(/edT_(.+)/, (ctx) => { userStates[ctx.from.id.toString()] = `EDIT_TITLE_${ctx.match[1]}`; ctx.reply('📝 नया टाइटल (Title) भेजें:'); });
-bot.action(/edD_(.+)/, (ctx) => { userStates[ctx.from.id.toString()] = `EDIT_DESC_${ctx.match[1]}`; ctx.reply('📝 नया डिस्क्रिप्शन (Description) भेजें (आप इसमें Link भी डाल सकते हैं):'); });
+bot.action(/edD_(.+)/, (ctx) => { userStates[ctx.from.id.toString()] = `EDIT_DESC_${ctx.match[1]}`; ctx.reply('📝 नया डिस्क्रिप्शन (Description) भेजें:'); });
 bot.action(/edQ_(.+)/, (ctx) => { 
     const originalQuiz = myQuizzes.get(ctx.match[1]);
     if(!originalQuiz) return ctx.reply('❌ Quiz not found.');
@@ -439,6 +522,7 @@ bot.action(/ready_(.+)/, async (ctx) => {
         session.isStarting = true; 
         await ctx.editMessageText(`${baseText}${count} people ready...\n<b>The quiz will start in 10 seconds!</b>`, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
         
+        // 🌟 10 सेकंड का मोटिवेशनल पॉप-अप मैसेज (फोटो के साथ)
         try {
             const prepMsg = await ctx.telegram.sendPhoto(chatId, CP_RAWAT_PHOTO_URL, {
                 caption: "🌟 <b>चलिए, क्विज शुरू करते हैं!</b> 🌟\n\n🎯 <i>सभी छात्र अपना सर्वश्रेष्ठ प्रदर्शन करें। आपकी मेहनत ही आपकी असली पहचान है!</i> 📚🏆\n\n👍 <b>All the Best! - CP Rawat Sir</b>",
@@ -478,11 +562,18 @@ async function sendNextQuestion(chatId) {
         );
     }
 
+    // 🚀 HTML प्रोमो इंजन (मेगा 3-बटन और सिंगल लिंक)
     if (session.qIndex > 0 && session.zeroCount === 0) {
         if (session.qIndex % 15 === 0) {
             const linkIndex = ((session.qIndex / 15) - 1) % 3; 
             const promoText = megaPromoDesc[linkIndex];
-            await bot.telegram.sendMessage(chatId, promoText, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+            
+            const promoButtons = Markup.inlineKeyboard([
+                [Markup.button.url(links[0].text, links[0].url)],
+                [Markup.button.url(links[1].text, links[1].url)],
+                [Markup.button.url(links[2].text, links[2].url)]
+            ]);
+            await bot.telegram.sendMessage(chatId, promoText, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...promoButtons });
             await new Promise(resolve => setTimeout(resolve, 3000));
         } 
         else if (session.qIndex % 5 === 0) {
@@ -490,7 +581,8 @@ async function sendNextQuestion(chatId) {
             const randomPromo = singlePromos[promoIndex];
             const linkObj = links[promoIndex % 3]; 
             
-            await bot.telegram.sendMessage(chatId, `${randomPromo}\n\n👉 <a href="${linkObj.url}">${linkObj.text}</a>\n🌐 ${linkObj.url}`, { parse_mode: 'HTML', link_preview_options: { is_disabled: false } });
+            const btn = Markup.inlineKeyboard([[Markup.button.url(linkObj.text, linkObj.url)]]);
+            await bot.telegram.sendMessage(chatId, `${randomPromo}\n\n👉 <a href="${linkObj.url}">${linkObj.text}</a>\n🌐 ${linkObj.url}`, { parse_mode: 'HTML', link_preview_options: { is_disabled: false }, ...btn });
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
     }
@@ -537,6 +629,7 @@ bot.action(/resume_(.+)/, (ctx) => {
     ctx.answerCbQuery();
 });
 
+// 🔴 STRICT SCORING (Correct Answers Only + Negative Marking)
 bot.on('poll_answer', (ctx) => {
     const ans = ctx.pollAnswer;
     activeSessions.forEach((session) => {
@@ -558,12 +651,15 @@ bot.on('poll_answer', (ctx) => {
     });
 });
 
+// 🏆 Final Leaderboard & Super Thank You Message
 function finishQuiz(chatId, wasForced) {
     const session = activeSessions.get(chatId);
     if (!session) return;
     if (session.timerObj) clearTimeout(session.timerObj);
     
     let results = Object.values(session.scores).sort((a, b) => b.score === a.score ? a.time - b.time : b.score - a.score).slice(0, 50);
+    
+    // Dynamic Questions Count (जितने प्रश्न पूछे गए, उतने का ही रिजल्ट)
     const askedQuestionsCount = session.qIndex === 0 ? 1 : session.qIndex; 
 
     let leaderboard = wasForced ? `🛑 <b>The quiz '${session.quiz.title}' was stopped!</b>\n\n` : `🏁 <b>The quiz '${session.quiz.title}' has finished!</b>\n\n`;
@@ -581,6 +677,7 @@ function finishQuiz(chatId, wasForced) {
     }
     bot.telegram.sendMessage(chatId, leaderboard, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.switchToChat('Share quiz', session.quiz.id)]]) });
 
+    // 🌟 5 सेकंड डिले के साथ आकर्षक बधाई मैसेज (फोटो के साथ)
     const top1 = results.length > 0 ? results[0] : null;
     const top2 = results.length > 1 ? results[1] : null;
     const top3 = results.length > 2 ? results[2] : null;
@@ -592,19 +689,41 @@ function finishQuiz(chatId, wasForced) {
     
     thankYouMsg += `यह सफलता आपकी कड़ी मेहनत का परिणाम है! 📚 जो छात्र टॉप नहीं कर पाए, वे बिल्कुल भी निराश न हों। निरंतर अभ्यास से आप भी सफलता के शिखर तक पहुँच सकते हैं। <b>CP Rawat Sir</b> हमेशा आपके उज्ज्वल भविष्य की कामना करते हैं! 🎯\n\n👇 <b>बेहतरीन तैयारी के लिए जुड़ें:</b>\n\n📚 <b>Notes Channel:</b> https://t.me/gkandgs12\n💬 <b>Practice Group:</b> https://t.me/gkandgs85\n🏆 <b>Quiz Club:</b> https://t.me/QuizClub15seconds`;
     
+    const thankYouBtns = Markup.inlineKeyboard([
+        [Markup.button.url(links[0].text, links[0].url)],
+        [Markup.button.url(links[1].text, links[1].url)],
+        [Markup.button.url(links[2].text, links[2].url)]
+    ]);
+    
     setTimeout(async () => {
         try {
-            await bot.telegram.sendPhoto(chatId, CP_RAWAT_PHOTO_URL, { caption: thankYouMsg, parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+            await bot.telegram.sendPhoto(chatId, CP_RAWAT_PHOTO_URL, { caption: thankYouMsg, parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...thankYouBtns });
         } catch (err) {
-            await bot.telegram.sendMessage(chatId, thankYouMsg, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } });
+            await bot.telegram.sendMessage(chatId, thankYouMsg, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...thankYouBtns });
         }
     }, 5000);
 
     activeSessions.delete(chatId);
 }
 
+// 📢 दैनिक HTML ब्रॉडकास्ट (हर 12 घंटे में)
+setInterval(() => {
+    activeGroups.forEach(async (chatId) => {
+        const btns = Markup.inlineKeyboard([
+            [Markup.button.url(links[0].text, links[0].url)],
+            [Markup.button.url(links[1].text, links[1].url), Markup.button.url(links[2].text, links[2].url)]
+        ]);
+        try { await bot.telegram.sendMessage(chatId, dailyPromoPost, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...btns }); } 
+        catch (err) { activeGroups.delete(chatId); }
+    });
+}, 12 * 60 * 60 * 1000); 
+
 const app = express();
 app.get('/', (req, res) => res.send('CP Rawat Official Engine is Live!'));
 app.listen(process.env.PORT || 3000);
-bot.launch();
 
+// 🚀 बोट स्टार्ट करने से पहले बैकअप लोड करें
+loadBackup().then(() => {
+    bot.launch();
+    console.log("✅ Bot is running and connected to Backup Channel!");
+});
