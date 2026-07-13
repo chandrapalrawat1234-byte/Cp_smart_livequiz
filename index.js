@@ -18,7 +18,7 @@ const activeGroups = new Set();
 const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || ''; 
 
 // 📸 आपकी फोटो का URL (अपना सही URL यहाँ डालें)
-const CP_RAWAT_PHOTO_URL = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'; 
+const CP_RAWAT_PHOTO_URL = 'https://photos.app.goo.gl/2Mp3gxux1EXWbsPx5'; 
 
 // 🔗 बटन्स और लिंक्स
 const links = [
