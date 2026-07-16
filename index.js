@@ -16,9 +16,8 @@ const activeGroups = new Set();
 let requireAdmin = false; // एडमिन लॉक का डिफ़ॉल्ट स्टेटस (शुरुआत में OFF)
 
 // 🚨 महत्वपूर्ण: यहाँ अपनी प्राइवेट बैकअप चैनल की ID डालें (जो /getid से मिलेगी) 
-// उदाहरण: const BACKUP_CHANNEL_ID ='-1004329056692';
-';
-const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || '-1004329056692'; 
+// उदाहरण: const BACKUP_CHANNEL_ID = '-1004329056692';
+const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || ''; 
 
 // 📸 आपकी फोटो का URL (डायरेक्ट लिंक सेट कर दी गई है)
 const CP_RAWAT_PHOTO_URL = 'https://i.ibb.co/twFTbpqq/1757043567213.png'; 
@@ -805,35 +804,4 @@ setInterval(() => {
 loadBackup().then(() => {
     bot.launch();
     console.log("✅ Bot is running and connected to Backup Channel!");
-});
-
-async function loadBackup() {
-    if (!BACKUP_CHANNEL_ID) return;
-    try {
-        const chat = await bot.telegram.getChat(BACKUP_CHANNEL_ID);
-        // यह तरीका पिन किए हुए मैसेज के अंदर की फाइल को आसानी से ढूंढ लेगा
-        if (chat.pinned_message && chat.pinned_message.document) {
-            const fileId = chat.pinned_message.document.file_id;
-            const link = await bot.telegram.getFileLink(fileId);
-            const response = await fetch(link.href);
-            const data = await response.json();
-            
-            myQuizzes.clear();
-            for (const [key, value] of data) {
-                myQuizzes.set(key, value);
-            }
-            console.log(`✅ मेमोरी लोड हो गई: ${myQuizzes.size} क्विज वापस आ गए हैं!`);
-        }
-    } catch (err) {
-        console.error('मेमोरी लोड करने में दिक्कत:', err.message);
-    }
-}
-
-// और /loadbackup कमांड को इस तरह लिखें जो फेल न हो:
-bot.command('loadbackup', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!allowedUsers.has(userId)) return;
-    
-    await loadBackup();
-    ctx.reply(`✅ अगर फाइल मिल गई होगी, तो मेमोरी लोड हो गई है! कुल क्विज: ${myQuizzes.size}`);
 });
