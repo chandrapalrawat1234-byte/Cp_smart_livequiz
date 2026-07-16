@@ -806,25 +806,4 @@ loadBackup().then(() => {
     bot.launch();
     console.log("✅ Bot is running and connected to Backup Channel!");
 });
-bot.command('loadbackup', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!allowedUsers.has(userId)) return;
-    
-    try {
-        const messages = await bot.telegram.getChatHistory(BACKUP_CHANNEL_ID, 10);
-        const docMsg = messages.find(m => m.document);
-        if (docMsg) {
-            const link = await bot.telegram.getFileLink(docMsg.document.file_id);
-            const response = await fetch(link.href);
-            const data = await response.json();
-            myQuizzes.clear();
-            for (const [key, value] of data) { myQuizzes.set(key, value); }
-            ctx.reply(`✅ सफलता! ${myQuizzes.size} क्विज मेमोरी में लोड हो गए हैं।`);
-        } else {
-            ctx.reply('❌ चैनल में कोई बैकअप फाइल नहीं मिली।');
-        }
-    } catch (e) {
-        ctx.reply('❌ एरर: बैकअप लोड नहीं हो पाया। चेक करें कि बोट चैनल में है या नहीं।');
-    }
-});
 
