@@ -13,12 +13,14 @@ const myQuizzes = new Map();
 const activeSessions = new Map(); 
 const activeGroups = new Set(); 
 
+let requireAdmin = false; // एडमिन लॉक का डिफ़ॉल्ट स्टेटस (शुरुआत में OFF)
+
 // 🚨 महत्वपूर्ण: यहाँ अपनी प्राइवेट बैकअप चैनल की ID डालें (जो /getid से मिलेगी) 
 // उदाहरण: const BACKUP_CHANNEL_ID = '-100123456789';
 const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || ''; 
 
-// 📸 आपकी फोटो का URL (अपना सही URL यहाँ डालें)
-const CP_RAWAT_PHOTO_URL = 'https://photos.app.goo.gl/2Mp3gxux1EXWbsPx5'; 
+// 📸 आपकी फोटो का URL (डायरेक्ट लिंक सेट कर दी गई है)
+const CP_RAWAT_PHOTO_URL = 'https://i.ibb.co/twFTbpqq/1757043567213.png'; 
 
 // 🔗 बटन्स और लिंक्स
 const links = [
@@ -51,6 +53,8 @@ const megaPromoDesc = [
 ];
 
 let dailyPromoPost = "🌟 <b>Study with CP Rawat Sir</b> 🌟\n\n🔥 <i>सरकारी नौकरी की पक्की तैयारी के लिए आज ही जुड़ें!</i>\n👇 <b>नीचे दिए गए लिंक्स से हमारे चैनल्स जॉइन करें:</b>";
+let promoIntervalHours = 12; 
+let promoIntervalId = null;
 
 // 🛡️ क्रैश-प्रूफ
 process.on('uncaughtException', (err) => console.log('Error:', err.message));
@@ -113,10 +117,14 @@ bot.on('channel_post', (ctx) => {
     }
 });
 
-const mainMenu = Markup.keyboard([
-  ['📝 Create New Quiz', '📊 My Quizzes'],
-  ['📢 दैनिक पोस्ट सेट करें']
-]).resize();
+// 📋 MAIN MENU (डायनामिक मेन्यू)
+function getMainMenu() {
+    return Markup.keyboard([
+      ['📝 Create New Quiz', '📊 My Quizzes'],
+      ['📢 दैनिक पोस्ट सेट करें', '🕒 पोस्ट का टाइम सेट करें'],
+      [`⚙️ एडमिन लॉक: ${requireAdmin ? 'ON' : 'OFF'}`]
+    ]).resize();
+}
 
 bot.start((ctx) => {
     const payload = ctx.startPayload;
@@ -127,15 +135,15 @@ bot.start((ctx) => {
     
     const userId = ctx.from.id.toString();
     if (allowedUsers.has(userId)) {
-        ctx.reply('👑 Welcome CP Rawat Sir!\nThe Ultimate Official Quiz Engine is ready. 👇', mainMenu);
+        ctx.reply('👑 Welcome CP Rawat Sir!\nThe Ultimate Official Quiz Engine is ready. 👇', getMainMenu());
     } else {
         const welcomeMsg = `👑 <b>CP Rawat Sir's Official Quiz Bot में आपका स्वागत है!</b> 👑\n━━━━━━━━━━━━━━━━━━━━\n\nयह एक सुरक्षित और प्राइवेट सिस्टम है।\n🔒 आगे बढ़ने के लिए कृपया अपना <b>मास्टर पासवर्ड (Master Key)</b> दर्ज करें:`;
         ctx.reply(welcomeMsg, { parse_mode: 'HTML' });
     }
 });
 
-// 🛑 STOP COMMAND (Super Fixed - From Old VIP Code)
-bot.command(['stop', 'stopquiz'], async (ctx) => {
+// 🛑 STOP COMMAND (सिर्फ /stopquiz ताकि ऑफिशियल बोट से टकराव न हो)
+bot.command('stopquiz', async (ctx) => {
     const chatId = ctx.chat.id;
     
     if (!activeSessions.has(chatId)) {
@@ -160,37 +168,44 @@ bot.command(['stop', 'stopquiz'], async (ctx) => {
 });
 
 // ==========================================
-// 🛡️ ANTI-INTERFERENCE (सिर्फ Quiz Bot को रोकेगा)
+// 🛡️ ANTI-INTERFERENCE (सिर्फ Quiz Bot को रोकेगा, नॉर्मल मैसेज नहीं काटेगा)
 // ==========================================
 bot.on('message', async (ctx, next) => {
     const chatId = ctx.chat?.id;
     if (chatId && activeSessions.has(chatId)) {
+        const session = activeSessions.get(chatId);
         const msg = ctx.message;
         if (!msg) return next();
         
         const txt = msg.text || msg.caption || '';
         
         // केवल 'quiz' टाइप के पोल या QuizBot के कीवर्ड्स को ही पकड़ेगा (म्यूजिक/लिंक को नहीं)
-        const isQuizPoll = msg.poll && msg.poll.type === 'quiz';
         const isQuizBotTrigger = txt.includes('Get ready for the quiz') || 
                                  txt.includes('The quiz will begin when') || 
                                  (txt.match(/^\/start@/i) && txt.toLowerCase().includes('quiz')) ||
                                  (msg.via_bot && msg.via_bot.username && msg.via_bot.username.toLowerCase().includes('quiz'));
 
-        if (isQuizPoll || isQuizBotTrigger) {
-            try { await ctx.deleteMessage(msg.message_id); } catch (e) {} 
-            if (isQuizBotTrigger) {
-                return ctx.reply('⚠️ <b>चेतावनी:</b> इस ग्रुप में पहले से ही <b>CP Rawat Sir</b> का एक मैराथन क्विज चल रहा है। कृपया इसके समाप्त होने तक कोई अन्य क्विज न चलाएं!', { parse_mode: 'HTML' });
+        if (isQuizBotTrigger) {
+            if (session.isAdmin) {
+                try { await ctx.deleteMessage(msg.message_id); } catch (e) {} 
             }
-            return; 
+            const botName = ctx.botInfo.first_name || 'CP Rawat Sir';
+            return ctx.reply(`⚠️ <b>चेतावनी:</b> इस ग्रुप में पहले से <b>${botName}</b> का एक मैराथन क्विज चल रहा है। कृपया इसके समाप्त होने तक कोई अन्य क्विज न चलाएं!`, { parse_mode: 'HTML' });
         }
     }
     return next();
 });
 
 // ==========================================
-// 📂 My Quizzes (पेज और व्यू सिस्टम)
+// ⚙️ सेटिंग्स और मेन्यू ऑपरेशन्स
 // ==========================================
+bot.hears(/⚙️ एडमिन लॉक: (ON|OFF)/, (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!allowedUsers.has(userId)) return;
+    requireAdmin = !requireAdmin;
+    ctx.reply(`✅ <b>सेटिंग अपडेट:</b>\nएडमिन लॉक अब <b>${requireAdmin ? 'ON' : 'OFF'}</b> हो गया है।\n\n${requireAdmin ? '🔒 अब बोट केवल उन्हीं ग्रुप्स में चलेगा जहाँ इसे एडमिन बनाया जाएगा।' : '🔓 अब बोट किसी भी ग्रुप में (बिना एडमिन बने भी) क्विज चला सकेगा।'}`, { parse_mode: 'HTML', ...getMainMenu() });
+});
+
 bot.hears(/view_(.+)/, (ctx) => showAdminDashboard(ctx, ctx.match[1]));
 bot.hears('📊 My Quizzes', (ctx) => sendQuizzesPage(ctx, ctx.from.id.toString(), 1));
 bot.action(/page_(.+)/, (ctx) => sendQuizzesPage(ctx, ctx.from.id.toString(), parseInt(ctx.match[1]), true));
@@ -238,7 +253,7 @@ bot.on('text', async (ctx, next) => {
 
     if (text === masterPassword) {
         allowedUsers.add(userId);
-        return ctx.reply('✅ Access Granted!', mainMenu);
+        return ctx.reply('✅ Access Granted!', getMainMenu());
     }
     if (!allowedUsers.has(userId)) return next();
 
@@ -249,7 +264,23 @@ bot.on('text', async (ctx, next) => {
     if (userStates[userId] === 'SET_DAILY_POST') {
         dailyPromoPost = text;
         userStates[userId] = '';
-        return ctx.reply('✅ दैनिक पोस्ट अपडेट हो गई!', mainMenu);
+        return ctx.reply('✅ दैनिक पोस्ट अपडेट हो गई!', getMainMenu());
+    }
+
+    if (text === '🕒 पोस्ट का टाइम सेट करें') {
+        userStates[userId] = 'SET_PROMO_TIME';
+        return ctx.reply(`🕒 <b>वर्तमान टाइम:</b> हर ${promoIntervalHours} घंटे में।\n\n✏️ कृपया नया टाइम (सिर्फ घंटों में, जैसे 6, 12, या 24) लिखकर भेजें:`, {parse_mode: 'HTML'});
+    }
+    if (userStates[userId] === 'SET_PROMO_TIME') {
+        const hrs = parseInt(text);
+        if (!isNaN(hrs) && hrs > 0) {
+            promoIntervalHours = hrs;
+            startPromoInterval(); 
+            userStates[userId] = '';
+            return ctx.reply(`✅ <b>डन!</b> अब दैनिक पोस्ट हर ${promoIntervalHours} घंटे में जाएगी।`, getMainMenu());
+        } else {
+            return ctx.reply('❌ कृपया केवल सही संख्या (नंबर) भेजें। (जैसे: 12)');
+        }
     }
 
     if (userStates[userId] === 'AWAITING_TITLE') {
@@ -479,30 +510,65 @@ async function initGroupLobby(ctx, quizId) {
     if (!quiz) return ctx.reply('❌ Quiz unavailable.');
     const chatId = ctx.chat.id;
     
+    // 💡 एडमिन लॉक और परमिशन की जाँच
+    let isAdminStatus = false;
     if (ctx.chat.type === 'group' || ctx.chat.type === 'supergroup') {
         try {
             const botMember = await ctx.telegram.getChatMember(chatId, ctx.botInfo.id);
-            if (botMember.status !== 'administrator' || !botMember.can_delete_messages) {
-                return ctx.reply('⚠️ <b>चेतावनी:</b> क्विज शुरू करने के लिए कृपया पहले इस बोट को ग्रुप का <b>Admin</b> बनाएं और <b>"Delete Messages"</b> की परमिशन दें।\n\n<i>परमिशन देने के बाद ही क्विज शेयर करें!</i>', { parse_mode: 'HTML' });
+            if (botMember.status === 'administrator' && botMember.can_delete_messages) {
+                isAdminStatus = true;
+            }
+            
+            // अगर एडमिन लॉक ON है, तो बोट को एडमिन होना ही चाहिए
+            if (requireAdmin && botMember.status !== 'administrator') {
+                return ctx.reply('⚠️ <b>परमिशन आवश्यक:</b>\nइस क्विज को चलाने के लिए कृपया पहले इस बोट को ग्रुप का <b>Admin</b> बनाएं।', { parse_mode: 'HTML' });
             }
         } catch (e) {
-            return ctx.reply('⚠️ कृपया बोट को एडमिन बनाएं और "Delete Messages" की परमिशन दें।');
+            if (requireAdmin) return ctx.reply('⚠️ कृपया बोट को एडमिन बनाएं।');
+            isAdminStatus = false;
         }
     }
 
+    // 💡 Ghost Message Detector (डिलीट होते ही ऑटोमैटिक फ्री करने वाला सिस्टम)
     if (activeSessions.has(chatId)) {
-        return ctx.reply('⚠️ <b>कृपया प्रतीक्षा करें!</b> इस ग्रुप में पहले से ही एक क्विज चल रहा है।', { parse_mode: 'HTML' });
+        const existingSession = activeSessions.get(chatId);
+        let isGhostSession = false;
+        
+        // अगर पुराना क्विज अभी शुरू नहीं हुआ है (लॉबी में अटका है)
+        if (!existingSession.isStarting && existingSession.lobbyMsgId) {
+            try {
+                // बोट चेक करेगा कि क्या पुराना मेसेज अभी भी ग्रुप में है या डिलीट हो गया
+                await bot.telegram.editMessageReplyMarkup(chatId, existingSession.lobbyMsgId, undefined, {
+                    inline_keyboard: [[Markup.button.callback(`I am ready!`, `ready_${chatId}`)]]
+                });
+            } catch (e) {
+                // अगर मैसेज डिलीट हो गया होगा, तो यह एरर देगा और बोट उसे 'Ghost' मान लेगा
+                isGhostSession = true;
+            }
+        }
+
+        // अगर मेसेज डिलीट हो चुका है, तो ग्रुप को तुरंत फ्री कर दो!
+        if (isGhostSession) {
+            activeSessions.delete(chatId);
+        } else {
+            // अगर मेसेज मौजूद है या क्विज सच में चल रहा है, तो डायनामिक चेतावनी दो
+            const botName = ctx.botInfo.first_name || 'CP Rawat Sir';
+            return ctx.reply(`⚠️ <b>चेतावनी:</b> इस ग्रुप में पहले से <b>${botName}</b> का एक मैराथन क्विज चल रहा है। कृपया इसके समाप्त होने का इंतज़ार करें।`, { parse_mode: 'HTML' });
+        }
     }
     
     let finalQuestions = [...quiz.questions];
     if (quiz.shufQ) finalQuestions.sort(() => Math.random() - 0.5);
 
-    activeSessions.set(chatId, { quiz, questions: finalQuestions, players: new Set(), scores: {}, qIndex: 0, zeroCount: 0, pollId: null, timerObj: null, currentPollCorrectId: null, isPaused: false, isStarting: false });
+    activeSessions.set(chatId, { quiz, questions: finalQuestions, players: new Set(), scores: {}, qIndex: 0, zeroCount: 0, pollId: null, timerObj: null, currentPollCorrectId: null, isPaused: false, isStarting: false, isAdmin: isAdminStatus, lobbyMsgId: null });
     
     const descText = quiz.description ? `\n<i>${quiz.description}</i>\n` : '';
     const text = `🏁 <b>The quiz '${quiz.title}'</b>${descText}\n🖊 ${finalQuestions.length} questions\n⏱ ${quiz.time} seconds per question\n\n🏁 The quiz will begin when at least 2 people are ready to play. Send /stopquiz to stop it.\n\nNobody is ready yet.`;
     
-    ctx.reply(text, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: [[Markup.button.callback(`I am ready!`, `ready_${chatId}`)]] } });
+    const lobbyMsg = await ctx.reply(text, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: [[Markup.button.callback(`I am ready!`, `ready_${chatId}`)]] } });
+    
+    // 💡 नया मेसेज ID सेव किया गया, ताकि भविष्य में इसे डिलीट होने पर पहचाना जा सके
+    activeSessions.get(chatId).lobbyMsgId = lobbyMsg.message_id;
 }
 
 bot.action(/ready_(.+)/, async (ctx) => {
@@ -706,8 +772,8 @@ function finishQuiz(chatId, wasForced) {
     activeSessions.delete(chatId);
 }
 
-// 📢 दैनिक HTML ब्रॉडकास्ट (हर 12 घंटे में)
-setInterval(() => {
+// 📢 दैनिक HTML ब्रॉडकास्ट टाइमर सिस्टम
+function sendDailyPromo() {
     activeGroups.forEach(async (chatId) => {
         const btns = Markup.inlineKeyboard([
             [Markup.button.url(links[0].text, links[0].url)],
@@ -716,11 +782,23 @@ setInterval(() => {
         try { await bot.telegram.sendMessage(chatId, dailyPromoPost, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...btns }); } 
         catch (err) { activeGroups.delete(chatId); }
     });
-}, 12 * 60 * 60 * 1000); 
+}
+
+function startPromoInterval() {
+    if (promoIntervalId) clearInterval(promoIntervalId);
+    promoIntervalId = setInterval(sendDailyPromo, promoIntervalHours * 60 * 60 * 1000);
+}
+startPromoInterval();
 
 const app = express();
 app.get('/', (req, res) => res.send('CP Rawat Official Engine is Live!'));
 app.listen(process.env.PORT || 3000);
+
+// 🚀 बोट को जगाए रखने के लिए 10-मिनट का एंटी-स्लीप अलार्म
+setInterval(() => {
+    const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`;
+    fetch(url).then(() => console.log('Ping: Bot is awake!')).catch(() => {});
+}, 10 * 60 * 1000);
 
 // 🚀 बोट स्टार्ट करने से पहले बैकअप लोड करें
 loadBackup().then(() => {
