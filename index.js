@@ -16,7 +16,8 @@ const activeGroups = new Set();
 let requireAdmin = false; // एडमिन लॉक का डिफ़ॉल्ट स्टेटस (शुरुआत में OFF)
 
 // 🚨 महत्वपूर्ण: यहाँ अपनी प्राइवेट बैकअप चैनल की ID डालें (जो /getid से मिलेगी) 
-// उदाहरण: const BACKUP_CHANNEL_ID = '-100123456789';
+// उदाहरण: const BACKUP_CHANNEL_ID ='-1004329056692';
+';
 const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || ''; 
 
 // 📸 आपकी फोटो का URL (डायरेक्ट लिंक सेट कर दी गई है)
