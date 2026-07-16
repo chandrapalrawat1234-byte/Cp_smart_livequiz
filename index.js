@@ -18,7 +18,7 @@ let requireAdmin = false; // एडमिन लॉक का डिफ़ॉल
 // 🚨 महत्वपूर्ण: यहाँ अपनी प्राइवेट बैकअप चैनल की ID डालें (जो /getid से मिलेगी) 
 // उदाहरण: const BACKUP_CHANNEL_ID ='-1004329056692';
 ';
-const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || ''; 
+const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || '-1004329056692'; 
 
 // 📸 आपकी फोटो का URL (डायरेक्ट लिंक सेट कर दी गई है)
 const CP_RAWAT_PHOTO_URL = 'https://i.ibb.co/twFTbpqq/1757043567213.png'; 
