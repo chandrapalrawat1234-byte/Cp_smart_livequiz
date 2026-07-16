@@ -807,3 +807,33 @@ loadBackup().then(() => {
     console.log("✅ Bot is running and connected to Backup Channel!");
 });
 
+async function loadBackup() {
+    if (!BACKUP_CHANNEL_ID) return;
+    try {
+        const chat = await bot.telegram.getChat(BACKUP_CHANNEL_ID);
+        // यह तरीका पिन किए हुए मैसेज के अंदर की फाइल को आसानी से ढूंढ लेगा
+        if (chat.pinned_message && chat.pinned_message.document) {
+            const fileId = chat.pinned_message.document.file_id;
+            const link = await bot.telegram.getFileLink(fileId);
+            const response = await fetch(link.href);
+            const data = await response.json();
+            
+            myQuizzes.clear();
+            for (const [key, value] of data) {
+                myQuizzes.set(key, value);
+            }
+            console.log(`✅ मेमोरी लोड हो गई: ${myQuizzes.size} क्विज वापस आ गए हैं!`);
+        }
+    } catch (err) {
+        console.error('मेमोरी लोड करने में दिक्कत:', err.message);
+    }
+}
+
+// और /loadbackup कमांड को इस तरह लिखें जो फेल न हो:
+bot.command('loadbackup', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!allowedUsers.has(userId)) return;
+    
+    await loadBackup();
+    ctx.reply(`✅ अगर फाइल मिल गई होगी, तो मेमोरी लोड हो गई है! कुल क्विज: ${myQuizzes.size}`);
+});
