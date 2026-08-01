@@ -6,6 +6,7 @@ import fs from 'fs';
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// 🗄️ मेमोरी और डेटाबेस
 const allowedUsers = new Set([process.env.MASTER_ID || '']); 
 const masterPassword = process.env.MASTER_PASSWORD || 'CP@2026';
 const userStates = {}; 
@@ -14,22 +15,26 @@ const myQuizzes = new Map();
 const activeSessions = new Map(); 
 const activeGroups = new Set(); 
 
-let requireAdmin = false; 
+let requireAdmin = false; // एडमिन लॉक का डिफ़ॉल्ट स्टेटस (शुरुआत में OFF)
 
+// 🚨 महत्वपूर्ण: यहाँ अपनी प्राइवेट बैकअप चैनल की ID डालें (जो /getid से मिलेगी) 
 const BACKUP_CHANNEL_ID = process.env.BACKUP_CHANNEL_ID || '-1004329056692'; 
 
+// 📸 आपकी फोटो का URL (डायरेक्ट लिंक सेट कर दी गई है)
 const CP_RAWAT_PHOTO_URL = 'https://i.ibb.co/twFTbpqq/1757043567213.png'; 
 
+// 🔗 बटन्स और लिंक्स
 const links = [
     { text: "📚 Join Notes Channel", url: "https://t.me/gkandgs12", desc: "📚 सी. पी. रावत सर के नोट्स के लिए यहाँ क्लिक करें" },
     { text: "💬 Join Practice Group", url: "https://t.me/gkandgs85", desc: "💬 अपने प्रश्न पूछने और डिस्कशन के लिए यहाँ क्लिक करें" },
     { text: "🏆 Join Quiz Club", url: "https://t.me/QuizClub15seconds", desc: "🏆 डेली लाइव क्विज और लीडरबोर्ड के लिए यहाँ क्लिक करें" }
 ];
 
+// 🎨 10 आकर्षक HTML प्रोमो पोस्ट्स (हर 5वें प्रश्न के लिए सिंगल लिंक)
 const singlePromos = [
     "🌟 <b>सटीक नोट्स और बेहतरीन तैयारी के लिए!</b> 🌟\n━━━━━━━━━━━━━━━━━━━━\n🔥 <i>क्या आप अपनी तैयारी को लेकर गंभीर हैं?</i>\nसही दिशा और सटीक मार्गदर्शन ही सफलता की एकमात्र कुंजी है! हजारों छात्र पहले से ही हमारे साथ जुड़कर अपनी सरकारी नौकरी की पक्की तैयारी कर रहे हैं。",
-    "🚀 <b>MISSION GOVT JOB 2026</b> 🚀\n━━━━━━━━━━━━━━━━━━━━\n📚 <i>परीक्षा का पैटर्न तेजी से बदल रहा है!</i> \nक्या आप अपडेटेड हैं? CP Rawat Sir के विशेष मार्गदर्शन में तैयार किए गए नए और महत्वपूर्ण प्रश्नों के साथ अपना लेवल चेक करें。",
-    "🏆 <b>खुद को परखें, सबसे आगे बढ़ें!</b> 🏆\n━━━━━━━━━━━━━━━━━━━━\n⚡ <i>सिर्फ पढ़ने से काम नहीं चलेगा!</i>\nप्रैक्टिस और टाइम मैनेजमेंट सबसे ज्यादा जरूरी है! जो छात्र समय बचाना सीखते हैं, वही टॉप करते हैं。",
+    "🚀 <b>MISSION GOVT JOB 2026</b> 🚀\n━━━━━━━━━━━━━━━━━━━━\n📚 <i>परीक्षा का पैटर्न तेजी से बदल रहा है!</i> \nक्या आप अपडेटेड हैं? CP Rawat Sir के विशेष मार्गदर्शन में तैयार किए गए नए और महत्वपूर्ण प्रश्नों के साथ अपना लेवल चेक करें।",
+    "🏆 <b>खुद को परखें, सबसे आगे बढ़ें!</b> 🏆\n━━━━━━━━━━━━━━━━━━━━\n⚡ <i>सिर्फ पढ़ने से काम नहीं चलेगा!</i>\nप्रैक्टिस और टाइम मैनेजमेंट सबसे ज्यादा जरूरी है! जो छात्र समय बचाना सीखते हैं, वही टॉप करते हैं।",
     "🧠 <b>आपकी सफलता, हमारा लक्ष्य</b> 🧠\n━━━━━━━━━━━━━━━━━━━━\n📖 <i>कठिन टॉपिक्स को आसान भाषा में समझें!</i>\nबिना महँगी कोचिंग के घर बैठे टॉप-लेवल की तैयारी करें। आपका समर्पण जरूर इतिहास रचेगा!",
     "✨ <b>स्मार्ट स्टडी का नया तरीका!</b> ✨\n━━━━━━━━━━━━━━━━━━━━\n🎯 <i>इधर-उधर भटकना बंद करें!</i>\nहस्तलिखित नोट्स, डेली प्रैक्टिस, और लाइव टेस्ट—सब एक ही जगह पर।",
     "🔴 <b>क्या आप तैयार हैं?</b> 🔴\n━━━━━━━━━━━━━━━━━━━━\n💡 सफलता उन्हें मिलती है जो सही समय पर सही दिशा चुनते हैं। CP Rawat Sir के साथ अपनी तैयारी को नई उड़ान दें!",
@@ -39,6 +44,7 @@ const singlePromos = [
     "💎 <b>सफलता का ब्रह्मास्त्र!</b> 💎\n━━━━━━━━━━━━━━━━━━━━\n📘 CP Rawat Sir के सटीक मार्गदर्शन और टॉप-क्लास कंटेंट के साथ अपनी जीत सुनिश्चित करें।"
 ];
 
+// 🎨 मेगा प्रोमो विवरण (तीनों बटन + तीनों लिंक टेक्स्ट में)
 const megaPromoDesc = [
     "🌟 <b>नोट्स और स्टडी मटेरियल का खजाना!</b> 🌟\n━━━━━━━━━━━━━━━━━━━━\nसभी महत्वपूर्ण विषयों के हस्तलिखित नोट्स और पीडीएफ के लिए हमारे मुख्य चैनल से जुड़ना न भूलें।\n\n👇 <b>सफलता सुनिश्चित करने के लिए हमारे सभी चैनल्स से जुड़ें:</b>\n\n📚 <b>Notes Channel:</b> https://t.me/gkandgs12\n💬 <b>Practice Group:</b> https://t.me/gkandgs85\n🏆 <b>Quiz Club:</b> https://t.me/QuizClub15seconds",
     
@@ -51,9 +57,13 @@ let dailyPromoPost = "🌟 <b>Study with CP Rawat Sir</b> 🌟\n\n🔥 <i>सर
 let promoIntervalHours = 12; 
 let promoIntervalId = null;
 
+// 🛡️ क्रैश-प्रूफ
 process.on('uncaughtException', (err) => console.log('Error:', err.message));
 process.on('unhandledRejection', (reason) => console.log('Promise Error:', reason));
 
+// ==========================================
+// 🔄 AUTO BACKUP SYSTEM (टेलीग्राम को डेटाबेस बनाना)
+// ==========================================
 let lastBackupMsgId = null;
 
 async function saveBackup() {
@@ -99,12 +109,16 @@ async function loadBackup() {
     }
 }
 
+// ==========================================
+// 🆔 CHANNEL ID GETTER (सिर्फ चैनल में काम करेगा)
+// ==========================================
 bot.on('channel_post', (ctx) => {
     if (ctx.channelPost.text === '/getid') {
         ctx.reply(`✅ इस चैनल की ID है:\n\n<code>${ctx.chat.id}</code>\n\nइसे कॉपी करें और अपने कोड में BACKUP_CHANNEL_ID की जगह पर डाल दें!`, { parse_mode: 'HTML' });
     }
 });
 
+// 📋 MAIN MENU (डायनामिक मेन्यू)
 function getMainMenu() {
     return Markup.keyboard([
       ['📝 Create New Quiz', '📊 My Quizzes'],
@@ -129,6 +143,7 @@ bot.start((ctx) => {
     }
 });
 
+// 🛑 STOP COMMAND
 bot.command('stopquiz', async (ctx) => {
     const chatId = ctx.chat.id;
     
@@ -153,6 +168,9 @@ bot.command('stopquiz', async (ctx) => {
     }
 });
 
+// ==========================================
+// 🛡️ ANTI-INTERFERENCE 
+// ==========================================
 bot.on('message', async (ctx, next) => {
     const chatId = ctx.chat?.id;
     if (chatId && activeSessions.has(chatId)) {
@@ -178,6 +196,9 @@ bot.on('message', async (ctx, next) => {
     return next();
 });
 
+// ==========================================
+// ⚙️ सेटिंग्स और मेन्यू ऑपरेशन्स
+// ==========================================
 bot.hears(/⚙️ एडमिन लॉक: (ON|OFF)/, (ctx) => {
     const userId = ctx.from.id.toString();
     if (!allowedUsers.has(userId)) return;
@@ -212,6 +233,9 @@ function sendQuizzesPage(ctx, userId, page, isEdit = false) {
     else ctx.reply(text, { parse_mode: 'HTML', ...markup });
 }
 
+// ==========================================
+// 📝 Creation & Edit Flow 
+// ==========================================
 bot.hears('📝 Create New Quiz', (ctx) => initQuizCreation(ctx));
 bot.action('create_quiz', (ctx) => initQuizCreation(ctx));
 
@@ -336,6 +360,7 @@ function parseQuestions(ctx, text, targetObj, callbackData) {
     );
 }
 
+// ⏱️ Ask Timer, Neg Mark & Shuffle
 bot.action('ask_timer_NEW', (ctx) => {
     ctx.editMessageText('⏱ **How much time should users have to answer each question?**',
         Markup.inlineKeyboard([
@@ -398,6 +423,9 @@ bot.action(/setS_(.+?)_(.+)/, async (ctx) => {
     showAdminDashboard(ctx, finalQuizId, true);
 });
 
+// ==========================================
+// 👑 Admin Dashboard & INLINE SHARE MAGIC
+// ==========================================
 function showAdminDashboard(ctx, quizId, isEditMsg = false) {
     const quiz = myQuizzes.get(quizId);
     if (!quiz) return ctx.reply('Quiz not found.');
@@ -466,10 +494,13 @@ bot.action(/edQ_(.+)/, (ctx) => {
     const userId = ctx.from.id.toString();
     tempQueue[userId] = JSON.parse(JSON.stringify(originalQuiz));
     userStates[userId] = 'EDIT_ADDQ_CLONE';
-    ctx.reply('📥 नए प्रश्न भेजें (वे इस क्विज की एक नई कॉपी/Clone में जुड़ जाएंगे यंत्र):');
+    ctx.reply('📥 नए प्रश्न भेजें (वे इस क्विज की एक नई कॉपी/Clone में जुड़ जाएंगे):');
 });
 bot.action(/back_to_admin_(.+)/, (ctx) => showAdminDashboard(ctx, ctx.match[1], true));
 
+// ==========================================
+// 🤝 Public Lobby & Live Execution
+// ==========================================
 async function initGroupLobby(ctx, quizId) {
     const quiz = myQuizzes.get(quizId);
     if (!quiz) return ctx.reply('❌ Quiz unavailable.');
@@ -582,9 +613,11 @@ async function sendNextQuestion(chatId) {
         );
     }
 
+    // 🚀 NEW HTML प्रोमो इंजन और मिनी रिजल्ट फ्लो
     if (session.qIndex > 0 && session.zeroCount === 0) {
         const qNum = session.qIndex; 
         
+        // 🏆 मिनी-रिजल्ट (10, 20, 30...)
         if (qNum % 10 === 0) {
             let tempResults = Object.values(session.scores).sort((a, b) => b.score === a.score ? a.time - b.time : b.score - a.score).slice(0, 5);
             let miniBoard = `🏆 <b>${qNum} प्रश्नों के बाद टॉपर्स की स्थिति!</b>\n\n`;
@@ -598,6 +631,7 @@ async function sendNextQuestion(chatId) {
             await bot.telegram.sendMessage(chatId, miniBoard, { parse_mode: 'HTML' });
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
+        // 🌟 मेगा प्रोमो (16, 36, 56...)
         else if ((qNum - 16) % 20 === 0) {
             const promoIndex = Math.floor((qNum - 16) / 20) % megaPromoDesc.length;
             const promoText = megaPromoDesc[promoIndex];
@@ -610,6 +644,7 @@ async function sendNextQuestion(chatId) {
             await bot.telegram.sendMessage(chatId, promoText, { parse_mode: 'HTML', link_preview_options: { is_disabled: true }, ...promoButtons });
             await new Promise(resolve => setTimeout(resolve, 3000));
         }
+        // 🔗 सिंगल प्रोमो (4, 8, 12, 24, 28, 32...)
         else if (qNum % 4 === 0) {
             const promoIndex = (Math.floor(qNum / 4) - 1) % singlePromos.length;
             const randomPromo = singlePromos[promoIndex];
@@ -663,6 +698,7 @@ bot.action(/resume_(.+)/, (ctx) => {
     ctx.answerCbQuery();
 });
 
+// 🔴 STRICT SCORING (✅ Correct, ❌ Wrong, ➖ Neg Mark & Attempted tracking)
 bot.on('poll_answer', (ctx) => {
     const ans = ctx.pollAnswer;
     activeSessions.forEach((session) => {
@@ -690,6 +726,7 @@ bot.on('poll_answer', (ctx) => {
     });
 });
 
+// 📄 ऑटोमैटिक PDF जनरेटर सिस्टम
 async function sendQuizPDF(chatId, quiz) {
     try {
         const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -774,6 +811,7 @@ async function sendQuizPDF(chatId, quiz) {
     }
 }
 
+// 🏆 Final Leaderboard & Super Thank You Message
 function finishQuiz(chatId, wasForced) {
     const session = activeSessions.get(chatId);
     if (!session) return;
@@ -793,10 +831,12 @@ function finishQuiz(chatId, wasForced) {
             let rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
             let finalScore = Number(r.score.toFixed(2));
             
+            // Time Formatting (Min & Sec)
             let mins = Math.floor(r.time / 60);
             let secs = Math.floor(r.time % 60);
             let timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
             
+            // Neg Mark Tracking
             let negMarkTxt = negMarkVal > 0 ? ` | ➖ ${((r.wrong) * negMarkVal).toFixed(2)}` : '';
             
             leaderboard += `${rank} ${r.name} – <b>${finalScore}/${askedQuestionsCount}</b> (${timeStr})\n👉 [अटेम्प्ट: ${r.attempted} | ✅ ${r.correct} | ❌ ${r.wrong}${negMarkTxt}]\n\n`; 
@@ -806,10 +846,12 @@ function finishQuiz(chatId, wasForced) {
     
     bot.telegram.sendMessage(chatId, leaderboard, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.switchToChat('Share quiz', session.quiz.id)]]) });
 
+    // 🌟 2 सेकंड बाद PDF सेंड करें
     setTimeout(() => {
         sendQuizPDF(chatId, session.quiz);
     }, 2000);
 
+    // 🌟 5 सेकंड डिले के साथ आपका पुराना ओरिजिनल बधाई मैसेज
     setTimeout(async () => {
         const top1 = results.length > 0 ? results[0] : null;
         const top2 = results.length > 1 ? results[1] : null;
@@ -826,10 +868,9 @@ function finishQuiz(chatId, wasForced) {
             await bot.telegram.sendMessage(chatId, thankYouMsg, { parse_mode: 'HTML' });
         }
         
-        activeSessions.delete(chatId); 
+        activeSessions.delete(chatId); // सुरक्षित रूप से सेशन खत्म
     }, 5000);
 }
-
 const PORT = process.env.PORT || 3000;
 express().get('/', (req, res) => res.send('Bot is running!')).listen(PORT, () => {
     console.log(`Server is listening on port ${PORT}`);
