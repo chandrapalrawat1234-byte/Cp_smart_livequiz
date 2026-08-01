@@ -876,6 +876,6 @@ const PORT = process.env.PORT || 3000;
 express().get('/', (req, res) => res.send('Bot is running!')).listen(PORT, () => {
     console.log(`Server is listening on port ${PORT}`);
 });
-/ 🔄 बोट चालू होते ही पुराना बैकअप लोड कर लेगा!
+// 🔄 बोट चालू होते ही पुराना बैकअप लोड कर लेगा!
 loadBackup();
 bot.launch();
