@@ -871,5 +871,10 @@ function finishQuiz(chatId, wasForced) {
         activeSessions.delete(chatId); // सुरक्षित रूप से सेशन खत्म
     }, 5000);
 }
+// 🌐 Render Web Service Port Fixer
+const PORT = process.env.PORT || 3000;
+express().get('/', (req, res) => res.send('Bot is running!')).listen(PORT, () => {
+    console.log(`Server is listening on port ${PORT}`);
+});
 
 bot.launch();
