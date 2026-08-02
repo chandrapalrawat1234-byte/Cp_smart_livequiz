@@ -589,7 +589,7 @@ async function sendNextQuestion(chatId) {
         if (qNum % 10 === 0) {
             let tempResults = Object.values(session.scores).sort((a, b) => b.score === a.score ? a.time - b.time : b.score - a.score).slice(0, 5);
             let miniBoard = `🏆 <b>${qNum} प्रश्नों के बाद टॉपर्स की स्थिति!</b>\n\n`;
-            if(tempResults.length === 0) miniBoard += "अभी तक कोई सही जवाब नहीं मिला है।\n";
+            if(tempResults.length === 0) miniBoard += "अभी तक कोई सही जवाब मिला नहीं है।\n";
             tempResults.forEach((r, i) => {
                 let rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
                 miniBoard += `${rank} ${r.name} – ${Number(r.score.toFixed(2))}/${qNum} (✅ ${r.correct} | ❌ ${r.wrong})\n`;
@@ -696,7 +696,8 @@ bot.on('poll_answer', (ctx) => {
 
 async function sendQuizPDF(chatId, quiz) {
     try {
-        const doc = new PDFDocument({ margin: 40, size: 'A4' });
+        // 🌟 पीडीएफ फिक्स: bufferPages: true लगा दिया गया है
+        const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
         const buffers = [];
         doc.on('data', buffers.push.bind(buffers));
         
@@ -816,6 +817,7 @@ function finishQuiz(chatId, wasForced) {
         sendQuizPDF(chatId, session.quiz);
     }, 2000);
 
+    // 🌟 आख़िरी मैसेज (प्रेरणादायक बातों और असली बटनों के साथ)
     setTimeout(async () => {
         const top1 = results.length > 0 ? results[0] : null;
 
@@ -835,9 +837,9 @@ function finishQuiz(chatId, wasForced) {
         ]);
 
         try {
-            await bot.telegram.sendPhoto(chatId, CP_RAWAT_PHOTO_URL, { caption: thankYouMsg, parse_mode: 'HTML', ...finalButtons });
+            await bot.telegram.sendPhoto(chatId, CP_RAWAT_PHOTO_URL, { caption: thankYouMsg, parse_mode: 'HTML', reply_markup: finalButtons.reply_markup });
         } catch (err) {
-            await bot.telegram.sendMessage(chatId, thankYouMsg, { parse_mode: 'HTML', ...finalButtons });
+            await bot.telegram.sendMessage(chatId, thankYouMsg, { parse_mode: 'HTML', reply_markup: finalButtons.reply_markup });
         }
         
         activeSessions.delete(chatId); 
