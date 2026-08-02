@@ -429,7 +429,7 @@ bot.on('inline_query', async (ctx) => {
     const query = ctx.inlineQuery.query;
     if (!query) return;
     const quiz = myQuizzes.get(query);
-    if (!quiz) return;
+    if (!query) return;
 
     const descText = quiz.description ? `\n<i>${quiz.description}</i>\n` : '';
     const text = `🏁 <b>The quiz '${quiz.title}'</b>${descText}\n🖊 ${quiz.questions.length} questions\n⏱ ${quiz.time} seconds per question\n➖ Negative Marking: -${quiz.negMark || 0}`;
@@ -695,11 +695,10 @@ bot.on('poll_answer', (ctx) => {
 });
 
 // ==========================================
-// 🚀 VIP PDF GENERATOR SYSTEM (Upgraded)
+// 🚀 VIP PDF GENERATOR SYSTEM (Error-Free Fixed)
 // ==========================================
 async function sendQuizPDF(chatId, quiz) {
     try {
-        // 🔒 DRM Security: Copy & Edit Disabled
         const doc = new PDFDocument({ 
             margin: 40, 
             size: 'A4', 
@@ -714,12 +713,14 @@ async function sendQuizPDF(chatId, quiz) {
         const bannerExists = fs.existsSync('banner.png');
 
         // 🌟 PAGE 1: BRANDING & COVER PAGE 🌟
-        doc.rect(0, 0, 595, 120).fill('#003366'); // Royal Blue Header
+        doc.rect(0, 0, 595, 120).fill('#003366'); 
         doc.font(fontPath).fontSize(30).fillColor('#FFD700').text('Study with CP Rawat Sir', 0, 35, { align: 'center' });
         doc.fontSize(11).fillColor('#FFFFFF').text('🎯 Target Exams: UPSC, MPPSC, UPPSC, NET, CTET, SSC, Railway, UP Police, NDA & All State Exams', 0, 80, { align: 'center' });
         
         if (logoExists) {
-            doc.save().globalAlpha(0.15).image('logo.png', 147, 280, { width: 300 }).restore();
+            doc.opacity(0.15);
+            doc.image('logo.png', 147, 280, { width: 300 });
+            doc.opacity(1.0);
         }
 
         doc.moveDown(5);
@@ -784,13 +785,12 @@ async function sendQuizPDF(chatId, quiz) {
 
             let totalHeightNeeded = qHeight + optHeights + ansHeight + expHeight + 15;
 
-            // Column/Page Switch Logic
             if (currentY + totalHeightNeeded > 780) {
                 if (col === 1) {
-                    col = 2; // Switch to right column
+                    col = 2; 
                     currentY = 100;
                 } else {
-                    doc.addPage(); // New page
+                    doc.addPage(); 
                     drawHeader();
                     col = 1;
                     currentY = 100;
@@ -799,11 +799,9 @@ async function sendQuizPDF(chatId, quiz) {
 
             let currentX = col === 1 ? leftX : rightX;
 
-            // Question
             doc.fillColor('#000080').text(qText, currentX, currentY, { width: colWidth });
             currentY += qHeight + 4;
 
-            // Options
             doc.fillColor('#000000');
             q.options.forEach((opt, i) => {
                 let oText = `  ${String.fromCharCode(65 + i)}) ${opt}`;
@@ -812,19 +810,17 @@ async function sendQuizPDF(chatId, quiz) {
             });
             currentY += 2;
 
-            // Answer with Light Green Background
             doc.rect(currentX - 2, currentY - 2, colWidth + 4, ansHeight).fill('#E6F4EA');
             doc.fillColor('#006400').text(ansText, currentX, currentY, { width: colWidth });
             currentY += ansHeight + 2;
 
-            // Explanation with Light Orange Background
             if (expText) {
                 doc.rect(currentX - 2, currentY - 2, colWidth + 4, expHeight).fill('#FFF4E6');
                 doc.fillColor('#D2691E').text(expText, currentX, currentY, { width: colWidth });
                 currentY += expHeight + 2;
             }
 
-            currentY += 15; // Space below question
+            currentY += 15; 
         });
 
         // 🌟 PAGE LAST: GRAND CLOSING 🌟
@@ -862,27 +858,25 @@ async function sendQuizPDF(chatId, quiz) {
         for (let i = 0; i < pages.count; i++) {
             doc.switchToPage(i);
             
-            // 🔴 Red Border everywhere
             doc.rect(15, 15, 565, 812).lineWidth(2).strokeColor('#B30000').stroke();
             
-            // 🔠 Watermark (Only on Question Pages)
             if (i > 0 && i < pages.count - 1) {
                 if (logoExists) {
-                    doc.save().globalAlpha(0.06).image('logo.png', 147, 280, { width: 300 }).restore();
+                    doc.opacity(0.06);
+                    doc.image('logo.png', 147, 280, { width: 300 });
+                    doc.opacity(1.0);
                 }
-                // Dual-tone Maroon/Red Diagonal Watermark
-                doc.save()
-                   .globalAlpha(0.12)
-                   .translate(80, 650) 
-                   .rotate(-45)        
-                   .font(fontPath)
-                   .fontSize(60)
-                   .fillColor('#800000') // Maroon
-                   .text('Study with CP Rawat Sir', 0, 0, { width: 900 })
-                   .restore();
+                doc.save();
+                doc.opacity(0.12);
+                doc.translate(80, 650); 
+                doc.rotate(-45);        
+                doc.font(fontPath);
+                doc.fontSize(60);
+                doc.fillColor('#800000'); 
+                doc.text('Study with CP Rawat Sir', 0, 0, { width: 900 });
+                doc.restore();
             }
 
-            // Footer (Every page except Cover)
             if (i > 0) {
                 doc.moveTo(40, 790).lineTo(555, 790).lineWidth(1).strokeColor('#000000').stroke();
                 doc.font(fontPath).fontSize(10).fillColor('#4F4F4F').text(`🌟 Study with CP Rawat Sir | Page ${i}`, 40, 800, { lineBreak: false });
@@ -943,7 +937,6 @@ function finishQuiz(chatId, wasForced) {
         sendQuizPDF(chatId, session.quiz);
     }, 2000);
 
-    // 🌟 आख़िरी मैसेज (प्रेरणादायक बातों और असली बटनों के साथ)
     setTimeout(async () => {
         const top1 = results.length > 0 ? results[0] : null;
 
@@ -979,4 +972,3 @@ express().get('/', (req, res) => res.send('Bot is running!')).listen(PORT, () =>
 
 loadBackup();
 bot.launch();
-
