@@ -429,7 +429,7 @@ bot.on('inline_query', async (ctx) => {
     const query = ctx.inlineQuery.query;
     if (!query) return;
     const quiz = myQuizzes.get(query);
-    if (!query) return;
+    if (!quiz) return;
 
     const descText = quiz.description ? `\n<i>${quiz.description}</i>\n` : '';
     const text = `🏁 <b>The quiz '${quiz.title}'</b>${descText}\n🖊 ${quiz.questions.length} questions\n⏱ ${quiz.time} seconds per question\n➖ Negative Marking: -${quiz.negMark || 0}`;
@@ -694,75 +694,200 @@ bot.on('poll_answer', (ctx) => {
     });
 });
 
+// ==========================================
+// 🚀 VIP PDF GENERATOR SYSTEM (Upgraded)
+// ==========================================
 async function sendQuizPDF(chatId, quiz) {
     try {
-        // 🌟 पीडीएफ फिक्स: bufferPages: true लगा दिया गया है
-        const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
+        // 🔒 DRM Security: Copy & Edit Disabled
+        const doc = new PDFDocument({ 
+            margin: 40, 
+            size: 'A4', 
+            bufferPages: true,
+            permissions: { copying: false, modifying: false } 
+        });
         const buffers = [];
         doc.on('data', buffers.push.bind(buffers));
         
         const fontPath = fs.existsSync('hindi.ttf') ? 'hindi.ttf' : 'Helvetica';
+        const logoExists = fs.existsSync('logo.png');
+        const bannerExists = fs.existsSync('banner.png');
+
+        // 🌟 PAGE 1: BRANDING & COVER PAGE 🌟
+        doc.rect(0, 0, 595, 120).fill('#003366'); // Royal Blue Header
+        doc.font(fontPath).fontSize(30).fillColor('#FFD700').text('Study with CP Rawat Sir', 0, 35, { align: 'center' });
+        doc.fontSize(11).fillColor('#FFFFFF').text('🎯 Target Exams: UPSC, MPPSC, UPPSC, NET, CTET, SSC, Railway, UP Police, NDA & All State Exams', 0, 80, { align: 'center' });
         
-        doc.on('pageAdded', () => {
-           if (fs.existsSync('logo.png')) {
-               doc.opacity(0.1).image('logo.png', 150, 250, { width: 300 });
-               doc.opacity(1.0);
-           }
-           doc.font(fontPath).fontSize(16).fillColor('#B30000').text('🔴 GK and GS classes by cprawat', { align: 'center' });
-           doc.fontSize(10).fillColor('#003366').text('🎯 Target Exams: UPSC, MPPSC, UPPSC, NET, CTET, SSC, Railway, UP Police, MPSI, RO/ARO, NDA & All State Competitive Exams.', { align: 'center' });
-           doc.moveTo(40, doc.y + 5).lineTo(550, doc.y + 5).strokeColor('#000000').stroke();
-           doc.moveDown(1.5);
-        });
-        
-        if (fs.existsSync('logo.png')) {
-            doc.opacity(0.1).image('logo.png', 150, 250, { width: 300 });
-            doc.opacity(1.0);
+        if (logoExists) {
+            doc.save().globalAlpha(0.15).image('logo.png', 147, 280, { width: 300 }).restore();
         }
-        doc.font(fontPath).fontSize(16).fillColor('#B30000').text('🔴 GK and GS classes by cprawat', { align: 'center' });
-        doc.fontSize(10).fillColor('#003366').text('🎯 Target Exams: UPSC, MPPSC, UPPSC, NET, CTET, SSC, Railway, UP Police, MPSI, RO/ARO, NDA & All State Competitive Exams.', { align: 'center' });
-        doc.moveTo(40, doc.y + 5).lineTo(550, doc.y + 5).strokeColor('#000000').stroke();
-        doc.moveDown(1.5);
+
+        doc.moveDown(5);
+        doc.fontSize(24).fillColor('#B30000').text(`📝 ${quiz.title}`, { align: 'center' });
+        if (quiz.description) {
+            doc.moveDown(0.5);
+            doc.fontSize(14).fillColor('#4F4F4F').text(quiz.description, { align: 'center' });
+        }
+        
+        doc.moveDown(3);
+        doc.fontSize(16).fillColor('#000080').text('💡 "सफलता कोई तुक्का नहीं है, यह आपकी दिन-रात की मेहनत का परिणाम है! आज का पसीना कल आपकी जीत की कहानी लिखेगा। उठो, जागो और तब तक मत रुको जब तक लक्ष्य प्राप्त न हो जाए!"', 60, doc.y, { align: 'center', width: 475 });
+        
+        doc.moveDown(4);
+        doc.fontSize(18).fillColor('#B30000').text('👇 सफलता सुनिश्चित करने के लिए हमारे प्रीमियम ग्रुप्स से जुड़ें:', { align: 'center' });
+        doc.moveDown(1);
+        
+        doc.fontSize(16).fillColor('#0000FF');
+        doc.text('🔗 Notes Channel: @gkandgs12', { align: 'center', link: 'https://t.me/gkandgs12', underline: true });
+        doc.moveDown(0.5);
+        doc.text('🔗 Practice Group: @gkandgs85', { align: 'center', link: 'https://t.me/gkandgs85', underline: true });
+        doc.moveDown(0.5);
+        doc.text('🏆 Quiz Club: @QuizClub15seconds', { align: 'center', link: 'https://t.me/QuizClub15seconds', underline: true });
+
+        // 🌟 PAGE 2+: QUESTION PAGES (Two-Column Layout) 🌟
+        doc.addPage();
+        
+        let col = 1; 
+        let currentY = 100;
+        const leftX = 40;
+        const rightX = 310;
+        const colWidth = 245;
+
+        function drawHeader() {
+            doc.rect(0, 0, 595, 75).fill('#003366');
+            doc.font(fontPath).fontSize(20).fillColor('#FFD700').text('Study with CP Rawat Sir', 0, 20, { align: 'center' });
+            doc.fontSize(10).fillColor('#FFFFFF').text('🎯 Target Exams: UPSC, MPPSC, UPPSC, SSC, Railway & All State Exams', 0, 50, { align: 'center' });
+        }
+
+        drawHeader();
 
         quiz.questions.forEach((q, index) => {
-            doc.font(fontPath).fontSize(12).fillColor('#000080').text(`🔵 Q${index + 1}. ${q.question}`);
+            doc.font(fontPath).fontSize(11);
+            
+            let qText = `🔵 Q${index + 1}. ${q.question}`;
+            let qHeight = doc.heightOfString(qText, { width: colWidth });
+            
+            let optHeights = 0;
             q.options.forEach((opt, i) => {
-                const prefix = String.fromCharCode(65 + i);
-                doc.fillColor('#000000').text(`  ${prefix}) ${opt}`);
+                optHeights += doc.heightOfString(`  ${String.fromCharCode(65 + i)}) ${opt}`, { width: colWidth }) + 2;
             });
-            
+
             const correctOpt = String.fromCharCode(65 + q.correctId);
-            doc.moveDown(0.2);
-            doc.fillColor('#008000').text(`🟢 उत्तर: ${correctOpt}) ${q.options[q.correctId]}`);
-            
+            let ansText = `✅ उत्तर: ${correctOpt}) ${q.options[q.correctId]}`;
+            let ansHeight = doc.heightOfString(ansText, { width: colWidth }) + 8;
+
+            let expText = "";
+            let expHeight = 0;
             if (q.explanation) {
-                let cleanExp = q.explanation.split('📚 Notes:')[0].split('💬 Practice:')[0].split('🏆 Quiz:')[0].trim();
-                doc.fillColor('#4F4F4F').text(`🔘 व्याख्या: ${cleanExp}`);
+                expText = `🔘 व्याख्या: ` + q.explanation.split('📚 Notes:')[0].split('💬 Practice:')[0].split('🏆 Quiz:')[0].trim();
+                expHeight = doc.heightOfString(expText, { width: colWidth }) + 8;
             }
-            doc.moveDown(1);
+
+            let totalHeightNeeded = qHeight + optHeights + ansHeight + expHeight + 15;
+
+            // Column/Page Switch Logic
+            if (currentY + totalHeightNeeded > 780) {
+                if (col === 1) {
+                    col = 2; // Switch to right column
+                    currentY = 100;
+                } else {
+                    doc.addPage(); // New page
+                    drawHeader();
+                    col = 1;
+                    currentY = 100;
+                }
+            }
+
+            let currentX = col === 1 ? leftX : rightX;
+
+            // Question
+            doc.fillColor('#000080').text(qText, currentX, currentY, { width: colWidth });
+            currentY += qHeight + 4;
+
+            // Options
+            doc.fillColor('#000000');
+            q.options.forEach((opt, i) => {
+                let oText = `  ${String.fromCharCode(65 + i)}) ${opt}`;
+                doc.text(oText, currentX, currentY, { width: colWidth });
+                currentY += doc.heightOfString(oText, { width: colWidth }) + 2;
+            });
+            currentY += 2;
+
+            // Answer with Light Green Background
+            doc.rect(currentX - 2, currentY - 2, colWidth + 4, ansHeight).fill('#E6F4EA');
+            doc.fillColor('#006400').text(ansText, currentX, currentY, { width: colWidth });
+            currentY += ansHeight + 2;
+
+            // Explanation with Light Orange Background
+            if (expText) {
+                doc.rect(currentX - 2, currentY - 2, colWidth + 4, expHeight).fill('#FFF4E6');
+                doc.fillColor('#D2691E').text(expText, currentX, currentY, { width: colWidth });
+                currentY += expHeight + 2;
+            }
+
+            currentY += 15; // Space below question
         });
-        
+
+        // 🌟 PAGE LAST: GRAND CLOSING 🌟
         doc.addPage();
-        if (fs.existsSync('banner.png')) {
-            doc.image('banner.png', 40, 40, { width: 515 });
-            doc.y = 300; 
-        }
-        doc.font(fontPath).fontSize(18).fillColor('#B30000').text("🔴 🎯 'GK and GS classes by cprawat' की प्रमुख विशेषताएं:", { align: 'center' });
-        doc.moveDown(1);
-        doc.fontSize(14).fillColor('#003366')
-           .text("🔵 ✅ CP Rawat Sir का सटीक मार्गदर्शन")
-           .moveDown(0.5)
-           .text("🔵 ✅ बेहतरीन हस्तलिखित नोट्स")
-           .moveDown(0.5)
-           .text("🔵 ✅ डेली लाइव टेस्ट और क्विज़")
-           .moveDown(0.5)
-           .text("🔵 ✅ अपडेटेड स्टडी मटेरियल");
+        doc.rect(0, 0, 595, 75).fill('#003366');
+        doc.font(fontPath).fontSize(24).fillColor('#FFD700').text('🏆 आपकी सफलता, हमारी पहचान! 🏆', 0, 25, { align: 'center' });
         
+        let lastY = 110;
+        if (bannerExists) {
+            doc.image('banner.png', 40, lastY, { width: 515 });
+            lastY += 170;
+        }
+
+        doc.moveDown(1);
+        doc.fontSize(18).fillColor('#B30000').text("🔴 🎯 'Study with CP Rawat Sir' की प्रमुख विशेषताएं:", 40, lastY, { align: 'center' });
+        lastY += 35;
+        
+        doc.fontSize(14).fillColor('#003366')
+           .text("🚀 ✅ सटीक मार्गदर्शन: CP Rawat Sir का वर्षों का अनुभव और टॉप क्लास गाइडेंस।", 40, lastY, { width: 515 })
+           .moveDown(0.6)
+           .text("📚 ✅ प्रीमियम नोट्स: बेहतरीन, रंगीन और आसान भाषा में तैयार पीडीएफ नोट्स।", { width: 515 })
+           .moveDown(0.6)
+           .text("🏆 ✅ डेली लाइव टेस्ट: आपकी स्पीड बढ़ाने के लिए क्विज़ और ऑल इंडिया लीडरबोर्ड।", { width: 515 })
+           .moveDown(0.6)
+           .text("🔥 ✅ अपडेटेड मटेरियल: परीक्षा के नए पैटर्न के अनुसार तैयार किए गए खास प्रश्न।", { width: 515 })
+           .moveDown(0.6)
+           .text("💡 ✅ स्मार्ट ट्रिक्स: कठिन विषयों को आसानी से याद रखने की बेहतरीन ट्रिक्स।", { width: 515 });
+        
+        doc.moveDown(3);
+        doc.fontSize(15).fillColor('#B30000')
+           .text('🌟 "रुकना मना है! जब तक लक्ष्य न मिल जाए, तब तक मेहनत करते रहो। जो छात्र आज पीछे हैं, वे निरंतर अभ्यास से कल टॉप कर सकते हैं। CP Rawat Sir हमेशा आपके उज्ज्वल भविष्य की कामना करते हैं!" 🎯', { align: 'center', width: 515 });
+
+        // 🔴 GLOBAL OVERLAYS (Watermarks, Borders & Footers) 🔴
         const pages = doc.bufferedPageRange();
         for (let i = 0; i < pages.count; i++) {
             doc.switchToPage(i);
-            doc.moveTo(40, 780).lineTo(550, 780).strokeColor('#000000').stroke();
-            doc.font(fontPath).fontSize(10).fillColor('#4F4F4F').text(`🌟 सटीक तैयारी, पक्की सफलता! हर कदम आपके साथ। | Page ${i + 1}`, 40, 790, { lineBreak: false });
-            doc.text(`🔗 YouTube & Telegram: @gkandgs12`, 350, 790, { align: 'right' });
+            
+            // 🔴 Red Border everywhere
+            doc.rect(15, 15, 565, 812).lineWidth(2).strokeColor('#B30000').stroke();
+            
+            // 🔠 Watermark (Only on Question Pages)
+            if (i > 0 && i < pages.count - 1) {
+                if (logoExists) {
+                    doc.save().globalAlpha(0.06).image('logo.png', 147, 280, { width: 300 }).restore();
+                }
+                // Dual-tone Maroon/Red Diagonal Watermark
+                doc.save()
+                   .globalAlpha(0.12)
+                   .translate(80, 650) 
+                   .rotate(-45)        
+                   .font(fontPath)
+                   .fontSize(60)
+                   .fillColor('#800000') // Maroon
+                   .text('Study with CP Rawat Sir', 0, 0, { width: 900 })
+                   .restore();
+            }
+
+            // Footer (Every page except Cover)
+            if (i > 0) {
+                doc.moveTo(40, 790).lineTo(555, 790).lineWidth(1).strokeColor('#000000').stroke();
+                doc.font(fontPath).fontSize(10).fillColor('#4F4F4F').text(`🌟 Study with CP Rawat Sir | Page ${i}`, 40, 800, { lineBreak: false });
+                doc.text(`🔗 YouTube & Telegram: @gkandgs12`, 350, 800, { align: 'right' });
+            }
         }
 
         doc.end();
@@ -773,13 +898,14 @@ async function sendQuizPDF(chatId, quiz) {
             await bot.telegram.sendDocument(chatId, {
                 source: pdfData,
                 filename: `${safeTitle}.pdf`
-            }, { caption: `📄 <b>${quiz.title}</b> की प्रोफेशनल PDF आ गई है! डाउनलोड करें और रिवीजन करें।`, parse_mode: 'HTML' });
+            }, { caption: `📄 <b>${quiz.title}</b> की VIP प्रोफेशनल PDF आ गई है!\n🔒 <i>यह PDF कॉपी-प्रोटेक्टेड है।</i>`, parse_mode: 'HTML' });
         });
         
     } catch (err) {
         console.error("PDF Generation Error:", err);
     }
 }
+// ==========================================
 
 function finishQuiz(chatId, wasForced) {
     const session = activeSessions.get(chatId);
@@ -853,3 +979,4 @@ express().get('/', (req, res) => res.send('Bot is running!')).listen(PORT, () =>
 
 loadBackup();
 bot.launch();
+
